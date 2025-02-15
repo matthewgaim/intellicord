@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"log"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/ai"
 	"github.com/matthewgaim/intellicord/guilds"
+	"github.com/openai/openai-go"
 )
 
 func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Session, r *discordgo.Ready) {
@@ -44,16 +47,16 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 			return
 		}
 
-		history, err := GetThreadMessages(s, channel.ID, s.State.User.ID)
-		if err != nil {
-			log.Printf("Error getting thread messages: %v\n", err.Error())
-			return
-		}
-
 		if channel.Type == discordgo.ChannelTypeGuildPublicThread || channel.Type == discordgo.ChannelTypeGuildPrivateThread {
+			history, err := GetThreadMessages(s, channel.ID, s.State.User.ID)
+			if err != nil {
+				log.Printf("Error getting thread messages: %v\n", err.Error())
+				return
+			}
 			if channel.OwnerID == s.State.User.ID {
 				log.Println("Message received in bot-created thread:", m.Content)
-
+				res := ai.QueryVectorDB(context.Background(), m.Content)
+				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
 				response := ai.LlmGenerateText(history, m.Content)
 				_, err := s.ChannelMessageSend(m.ChannelID, response)
 				if err != nil {
@@ -68,6 +71,38 @@ func CommandLookupHandler() func(s *discordgo.Session, i *discordgo.InteractionC
 	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
 			h(s, i)
+		}
+	}
+}
+
+func GetAttachmentFromMessageHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		if len(m.Attachments) == 0 {
+			return
+		}
+
+		thread, err := s.MessageThreadStart(m.ChannelID, m.ID, m.Attachments[0].Filename, 60)
+		if err != nil {
+			log.Printf("Error creating thread: %v", err)
+			return
+		}
+
+		for i, attachment := range m.Attachments {
+			log.Printf("Attachment %d: %s", i, attachment.Filename)
+			attachmentLink := attachment.URL
+			filename := attachment.Filename
+
+			fileText, err := getFileText(attachmentLink)
+			if err != nil {
+				log.Printf("Error getting file text: %v", err)
+				continue
+			}
+
+			ai.PrepareDocForQuerying(context.Background(), fileText, filename)
+			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", attachment.Filename))
+			if err != nil {
+				log.Printf("Error sending message in thread: %v", err)
+			}
 		}
 	}
 }

@@ -28,10 +28,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating Discord session: %v", err)
 	}
+
 	ai.InitAI()
 
 	// Command handlers
 	handlers.InitCommands()
+
+	// Command lookup
+	dg.AddHandler(handlers.CommandLookupHandler())
 
 	// Register commands when bot is ready
 	dg.AddHandler(handlers.BotReadyRegisterCommandsHandler(dg))
@@ -42,17 +46,16 @@ func main() {
 	// Bot removed from server (doesnt work)
 	dg.AddHandler(handlers.BotRemovedFromServerHandler())
 
-	// Respond to user in a bot-created thread from a /ask command
+	// Respond to user in a bot-created thread
 	dg.AddHandler(handlers.BotRespondToThreadHandler())
 
-	// Command lookup
-	dg.AddHandler(handlers.CommandLookupHandler())
+	// Listen for attachments
+	dg.AddHandler(handlers.GetAttachmentFromMessageHandler())
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 	if err = dg.Open(); err != nil {
 		log.Fatalf("Error opening connection: %v", err)
 	}
-	// Wait for the bot to be ready
 	fmt.Println("Waiting for bot initialization...")
 	if dg.State.User == nil {
 		log.Fatal("Bot user is not initialized")

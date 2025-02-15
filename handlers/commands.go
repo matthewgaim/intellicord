@@ -23,7 +23,7 @@ var (
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "question",
 					Description: "Your question",
-					Required:    true, // Make it mandatory
+					Required:    true,
 				},
 			},
 		},
@@ -69,13 +69,11 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
-		// Ensure initialMsg is not nil before proceeding
 		if initialMsg == nil || initialMsg.ID == "" {
 			log.Println("Initial message is nil or missing an ID")
 			return
 		}
 
-		// Create a thread from the initial message
 		thread, err := s.MessageThreadStart(i.ChannelID, initialMsg.ID, userMessage, 60)
 		if err != nil {
 			log.Println("Error creating thread:", err.Error())
@@ -88,10 +86,7 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			fmt.Println("Error sending message in thread:", err)
 		}
 
-		// Generate the AI response
 		response := ai.LlmGenerateText(nil, userMessage)
-
-		// Send the AI response within the thread
 		_, err = s.ChannelMessageSend(thread.ID, response)
 		if err != nil {
 			fmt.Println("Error sending message in thread:", err)
