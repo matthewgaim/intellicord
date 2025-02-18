@@ -49,9 +49,6 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 }
 
 func QueryVectorDB(ctx context.Context, query string, doc_url string) string {
-	if doc_url == "CHANGE_ME" {
-		log.Println("*****QUERYVECTORDB NEEDS TO BE FIXED****")
-	}
 	query_where := map[string]string{
 		"doc_url": doc_url,
 	}

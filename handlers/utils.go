@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/openai/openai-go"
@@ -45,12 +44,6 @@ func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]o
 		}
 	}
 	return history, nil
-}
-
-func getFileType(file string) string {
-	split := strings.Split(file, ".")
-	fileType := split[len(split)-1]
-	return fileType
 }
 
 func getFileText(pdfURL string) (string, error) {
