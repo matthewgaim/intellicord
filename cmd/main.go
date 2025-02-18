@@ -50,7 +50,7 @@ func main() {
 	dg.AddHandler(handlers.BotRespondToThreadHandler())
 
 	// Listen for attachments
-	dg.AddHandler(handlers.GetAttachmentFromMessageHandler())
+	dg.AddHandler(handlers.StartThreadFromAttachmentUploadHandler())
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 	if err = dg.Open(); err != nil {

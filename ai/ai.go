@@ -30,8 +30,8 @@ func InitAI() {
 	}
 }
 
-func PrepareDocForQuerying(ctx context.Context, doc string, title string) {
-	addChunksToVectorDB(ctx, doc, title)
+func PrepareDocForQuerying(ctx context.Context, doc string, title string, doc_url string) {
+	addChunksToVectorDB(ctx, doc, title, doc_url)
 }
 
 func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) string {
@@ -48,25 +48,35 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 	return response
 }
 
-func QueryVectorDB(ctx context.Context, query string) string {
-	res, err := chromemCollection.Query(ctx, query, 1, nil, nil)
+func QueryVectorDB(ctx context.Context, query string, doc_url string) string {
+	if doc_url == "CHANGE_ME" {
+		log.Println("*****QUERYVECTORDB NEEDS TO BE FIXED****")
+	}
+	query_where := map[string]string{
+		"doc_url": doc_url,
+	}
+	res, err := chromemCollection.Query(ctx, query, 1, query_where, nil)
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Printf("ID: %v\nSimilarity: %v\nContent: %v\n", res[0].ID, res[0].Similarity, res[0].Content)
-	return res[0].Content
+	if len(res) > 0 {
+		fmt.Printf("ID: %v\nSimilarity: %v\nContent: %v\n", res[0].ID, res[0].Similarity, res[0].Content)
+		return res[0].Content
+	} else {
+		return "No additional context found."
+	}
 }
 
-func addChunksToVectorDB(ctx context.Context, doc string, title string) {
+func addChunksToVectorDB(ctx context.Context, doc string, title string, doc_url string) {
 	chunks := chunkText(doc)
 	var ids []string
 	var metadatas []map[string]string
 	var contents []string
 	for i, chunk := range chunks {
-		ids = append(ids, fmt.Sprintf("doc1_chunk_%d", i))
+		ids = append(ids, fmt.Sprintf("%v_chunk_%d", title, i))
 		meta := map[string]string{
-			"title": title,
+			"title":   title,
+			"doc_url": doc_url,
 		}
 		metadatas = append(metadatas, meta)
 		contents = append(contents, chunk)

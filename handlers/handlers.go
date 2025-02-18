@@ -11,6 +11,14 @@ import (
 	"github.com/openai/openai-go"
 )
 
+func CommandLookupHandler() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+			h(s, i)
+		}
+	}
+}
+
 func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Session, r *discordgo.Ready) {
 	return func(s *discordgo.Session, r *discordgo.Ready) {
 		for _, g := range r.Guilds {
@@ -48,6 +56,13 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 		}
 
 		if channel.Type == discordgo.ChannelTypeGuildPublicThread || channel.Type == discordgo.ChannelTypeGuildPrivateThread {
+			// Don't recognize extra files in a thread
+			if len(m.Attachments) > 0 {
+				s.ChannelMessageDelete(channel.ID, m.Message.ID)
+				s.ChannelMessageSend(channel.ID, "Attached document will not be recognized in context")
+				return
+			}
+
 			history, err := GetThreadMessages(s, channel.ID, s.State.User.ID)
 			if err != nil {
 				log.Printf("Error getting thread messages: %v\n", err.Error())
@@ -55,10 +70,16 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 			}
 			if channel.OwnerID == s.State.User.ID {
 				log.Println("Message received in bot-created thread:", m.Content)
-				res := ai.QueryVectorDB(context.Background(), m.Content)
+
+				rootMsg, err := getRootMessageOfThread(s, channel)
+				if err != nil {
+					log.Printf("Error getting root message: %v", err)
+				}
+				docURL := rootMsg.Attachments[0].URL
+				res := ai.QueryVectorDB(context.Background(), m.Content, docURL)
 				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
 				response := ai.LlmGenerateText(history, m.Content)
-				_, err := s.ChannelMessageSend(m.ChannelID, response)
+				_, err = s.ChannelMessageSend(m.ChannelID, response)
 				if err != nil {
 					log.Println("Error sending message in thread:", err)
 				}
@@ -67,21 +88,25 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 	}
 }
 
-func CommandLookupHandler() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			h(s, i)
-		}
-	}
-}
-
-func GetAttachmentFromMessageHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
+func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if len(m.Attachments) == 0 {
 			return
 		}
 
-		thread, err := s.MessageThreadStart(m.ChannelID, m.ID, m.Attachments[0].Filename, 60)
+		channel, err := s.Channel(m.ChannelID)
+		if err != nil {
+			log.Println("Error fetching channel:", err)
+			return
+		}
+		if channel.Type == discordgo.ChannelTypeGuildPublicThread || channel.Type == discordgo.ChannelTypeGuildPrivateThread {
+			log.Println("Documents wont be recognized in an existing thread")
+			return
+		}
+		data := &discordgo.ThreadStart{
+			Name: m.Attachments[0].Filename,
+		}
+		thread, err := s.MessageThreadStartComplex(m.ChannelID, m.ID, data)
 		if err != nil {
 			log.Printf("Error creating thread: %v", err)
 			return
@@ -91,6 +116,7 @@ func GetAttachmentFromMessageHandler() func(s *discordgo.Session, m *discordgo.M
 			log.Printf("Attachment %d: %s", i, attachment.Filename)
 			attachmentLink := attachment.URL
 			filename := attachment.Filename
+			url := attachment.URL
 
 			fileText, err := getFileText(attachmentLink)
 			if err != nil {
@@ -98,7 +124,7 @@ func GetAttachmentFromMessageHandler() func(s *discordgo.Session, m *discordgo.M
 				continue
 			}
 
-			ai.PrepareDocForQuerying(context.Background(), fileText, filename)
+			ai.PrepareDocForQuerying(context.Background(), fileText, filename, url)
 			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", attachment.Filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)

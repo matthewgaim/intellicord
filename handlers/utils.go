@@ -18,9 +18,10 @@ type ExtractedTextResponse struct {
 }
 
 var PARSER_API_URL = "https://gs88488cwckgkcwc8s04owco.getaroomy.com/extract_text"
+var THREAD_LIMIT = 20
 
 func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]openai.ChatCompletionMessageParamUnion, error) {
-	msgs, err := s.ChannelMessages(threadID, 20, "", "", "")
+	msgs, err := s.ChannelMessages(threadID, THREAD_LIMIT, "", "", "")
 	if err != nil {
 		return nil, fmt.Errorf("error fetching messages: %w", err)
 	}
@@ -30,10 +31,16 @@ func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]o
 	for i := len(msgs) - 1; i >= 0; i-- {
 		msg = msgs[i]
 		if msg.Author.ID == botID {
-			log.Printf("Bot: %v\n", msg.Content)
+			if len(msg.Attachments) > 0 {
+				log.Printf("Bot's Attachments: %d\n", len(msg.Attachments))
+			}
+			log.Printf("Bot (Type %d): %v\n", msg.Type, msg.Content)
 			history = append(history, openai.AssistantMessage(msg.Content))
 		} else {
-			log.Printf("User: %v\n", msg.Content)
+			if len(msg.Attachments) > 0 {
+				log.Printf("User's Attachments: %d\n", len(msg.Attachments))
+			}
+			log.Printf("User (Type %d): %v\n", msg.Type, msg.Content)
 			history = append(history, openai.UserMessage(msg.Content))
 		}
 	}
@@ -74,4 +81,12 @@ func getFileText(pdfURL string) (string, error) {
 	}
 
 	return result.ExtractedText, nil
+}
+
+func getRootMessageOfThread(s *discordgo.Session, channel *discordgo.Channel) (message *discordgo.Message, err error) {
+	parentMessage, err := s.ChannelMessage(channel.ParentID, channel.ID)
+	if err != nil {
+		return nil, err
+	}
+	return parentMessage, nil
 }
