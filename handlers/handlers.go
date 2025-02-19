@@ -113,10 +113,9 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 		}
 
 		for i, attachment := range m.Attachments {
-			log.Printf("Attachment %d: %s", i, attachment.Filename)
 			attachmentLink := attachment.URL
 			filename := attachment.Filename
-			url := attachment.URL
+			log.Printf("Attachment %d: %s (%s)", i, filename, attachmentLink)
 
 			fileText, err := getFileText(attachmentLink)
 			if err != nil {
@@ -124,8 +123,8 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 				continue
 			}
 
-			ai.PrepareDocForQuerying(context.Background(), fileText, filename, url)
-			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", attachment.Filename))
+			ai.PrepareDocForQuerying(context.Background(), fileText, filename, attachmentLink)
+			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
 			}

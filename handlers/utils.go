@@ -47,7 +47,7 @@ func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]o
 }
 
 func getFileText(pdfURL string) (string, error) {
-	payload := map[string]string{"pdf_url": pdfURL}
+	payload := map[string]string{"file_url": pdfURL}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("failed to create JSON payload: %v", err)
