@@ -25,7 +25,7 @@ func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Se
 			log.Printf("Commands for Server: %s\n", g.ID)
 			guilds.RegisterCommandsForGuild(dg, g.ID, commands)
 		}
-		dg.UpdateCustomStatus("Type /ask to use Intellicord")
+		dg.UpdateCustomStatus("Upload a file to any channel, or type /ask to use Intellicord")
 	}
 }
 
@@ -123,11 +123,18 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 				continue
 			}
 
-			ai.PrepareDocForQuerying(context.Background(), fileText, filename, attachmentLink)
+			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink)
 			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
 			}
 		}
+	}
+}
+
+func AttachmentDeletedHandler() func(s *discordgo.Session, m *discordgo.MessageDelete) {
+	return func(s *discordgo.Session, m *discordgo.MessageDelete) {
+		message_id := m.Message.ID
+		ai.DeleteEmbeddings(context.Background(), message_id)
 	}
 }

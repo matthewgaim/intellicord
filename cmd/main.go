@@ -52,6 +52,8 @@ func main() {
 	// Listen for attachments
 	dg.AddHandler(handlers.StartThreadFromAttachmentUploadHandler())
 
+	dg.AddHandler(handlers.AttachmentDeletedHandler())
+
 	dg.Identify.Intents = discordgo.IntentsAll
 	if err = dg.Open(); err != nil {
 		log.Fatalf("Error opening connection: %v", err)
