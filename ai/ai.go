@@ -84,35 +84,40 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 	return response
 }
 
-func QueryVectorDB(ctx context.Context, query string, doc_url string) string {
+func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAttachments int) string {
 	queryVector, err := getEmbedding(query)
 	if err != nil {
 		log.Fatal("Error generating query embedding:", err)
 	}
-
+	fmt.Printf("Attachments to query: %d", numOfAttachments)
 	rows, err := DbPool.Query(ctx, `
-	SELECT content, embedding <-> $1 AS distance 
+	SELECT content, title, embedding <-> $1 AS distance 
 	FROM chunks 
-	WHERE doc_url = $2 
+	WHERE message_id = $2
+	AND (embedding <-> $1) >= 0.5
 	ORDER BY distance 
-	LIMIT 1`, pgvector.NewVector(queryVector), doc_url)
+	LIMIT $3`, pgvector.NewVector(queryVector), rootMsgID, numOfAttachments)
 	if err != nil {
 		log.Fatal("Error querying nearest neighbors:", err)
 	}
 	defer rows.Close()
-
+	var context []string
 	if rows.Next() {
 		var content string
+		var title string
 		var distance float32
-		err := rows.Scan(&content, &distance)
+		err := rows.Scan(&content, &title, &distance)
 		if err != nil {
 			log.Fatal("Error scanning row:", err)
 		}
-		fmt.Printf("Similarity: %v\nContent: %v\n", distance, content)
-		return content
+		content = fmt.Sprintf("%s: %s", title, content)
+		fmt.Println(content[:50])
+		context = append(context, content)
 	} else {
 		return "No additional context found."
 	}
+	result := strings.Join(context, "\n")
+	return result
 }
 
 func getEmbedding(text string) ([]float32, error) {

@@ -75,8 +75,9 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				if err != nil {
 					log.Printf("Error getting root message: %v", err)
 				}
-				docURL := rootMsg.Attachments[0].URL
-				res := ai.QueryVectorDB(context.Background(), m.Content, docURL)
+				numOfAttachments := len(rootMsg.Attachments)
+				rootMsgID := rootMsg.ID
+				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)
 				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
 				response := ai.LlmGenerateText(history, m.Content)
 				_, err = s.ChannelMessageSend(m.ChannelID, response)
