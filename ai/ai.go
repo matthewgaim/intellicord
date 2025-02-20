@@ -2,36 +2,72 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"regexp"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/openai/openai-go"
-	"github.com/philippgille/chromem-go"
+	"github.com/pgvector/pgvector-go"
 )
-
-var oai *openai.Client
-var chromemCollection *chromem.Collection
 
 const (
 	ChunkSize   = 512
 	OverlapSize = 128
 )
 
+var oai *openai.Client
+var DbPool *pgxpool.Pool
+var OpenAIAPIKey string
+
 func InitAI() {
 	var err error
 
 	oai = openai.NewClient()
-	db := chromem.NewDB()
-	chromemCollection, err = db.CreateCollection("chunked-user-docs", nil, nil)
+	DATABASE_URL := os.Getenv("DATABASE_URL")
+	OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
+
+	DbPool, err = pgxpool.New(context.Background(), DATABASE_URL)
 	if err != nil {
-		panic(err)
+		log.Fatal("Unable to connect to database:", err)
+	}
+
+	_, err = DbPool.Exec(context.Background(), "CREATE EXTENSION IF NOT EXISTS vector")
+	if err != nil {
+		log.Fatal("Error enabling pgvector:", err)
+	}
+
+	_, err = DbPool.Exec(context.Background(), `
+	CREATE TABLE IF NOT EXISTS chunks (
+		id SERIAL PRIMARY KEY,
+		message_id TEXT,
+		title TEXT,
+		doc_url TEXT,
+		content TEXT,
+		embedding vector(1536) -- OpenAI embeddings are 1536-dimensional
+	);`)
+	if err != nil {
+		log.Fatal("Error creating chunks table:", err)
 	}
 }
 
-func PrepareDocForQuerying(ctx context.Context, doc string, title string, doc_url string) {
-	addChunksToVectorDB(ctx, doc, title, doc_url)
+func ChunkAndVectorize(ctx context.Context, message_id string, doc string, title string, doc_url string) {
+	chunks := chunkText(doc)
+	for _, chunk := range chunks {
+		embedding, err := getEmbedding(chunk)
+		if err != nil {
+			log.Fatalf("Error generating embedding for chunk: %v", err)
+		}
+
+		_, err = DbPool.Exec(ctx, "INSERT INTO chunks (message_id, title, doc_url, content, embedding) VALUES ($1, $2, $3, $4, $5)", message_id, title, doc_url, chunk, pgvector.NewVector(embedding))
+		if err != nil {
+			log.Fatalf("Failed to add chunk for '%v': %v", title, err)
+		}
+	}
 }
 
 func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) string {
@@ -49,40 +85,66 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 }
 
 func QueryVectorDB(ctx context.Context, query string, doc_url string) string {
-	query_where := map[string]string{
-		"doc_url": doc_url,
-	}
-	res, err := chromemCollection.Query(ctx, query, 1, query_where, nil)
+	queryVector, err := getEmbedding(query)
 	if err != nil {
-		panic(err)
+		log.Fatal("Error generating query embedding:", err)
 	}
-	if len(res) > 0 {
-		fmt.Printf("ID: %v\nSimilarity: %v\nContent: %v\n", res[0].ID, res[0].Similarity, res[0].Content)
-		return res[0].Content
+
+	rows, err := DbPool.Query(ctx, `
+	SELECT content, embedding <-> $1 AS distance 
+	FROM chunks 
+	WHERE doc_url = $2 
+	ORDER BY distance 
+	LIMIT 1`, pgvector.NewVector(queryVector), doc_url)
+	if err != nil {
+		log.Fatal("Error querying nearest neighbors:", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var content string
+		var distance float32
+		err := rows.Scan(&content, &distance)
+		if err != nil {
+			log.Fatal("Error scanning row:", err)
+		}
+		fmt.Printf("Similarity: %v\nContent: %v\n", distance, content)
+		return content
 	} else {
 		return "No additional context found."
 	}
 }
 
-func addChunksToVectorDB(ctx context.Context, doc string, title string, doc_url string) {
-	chunks := chunkText(doc)
-	var ids []string
-	var metadatas []map[string]string
-	var contents []string
-	for i, chunk := range chunks {
-		ids = append(ids, fmt.Sprintf("%v_chunk_%d", title, i))
-		meta := map[string]string{
-			"title":   title,
-			"doc_url": doc_url,
-		}
-		metadatas = append(metadatas, meta)
-		contents = append(contents, chunk)
-	}
-	err := chromemCollection.Add(ctx, ids, nil, metadatas, contents)
+func getEmbedding(text string) ([]float32, error) {
+	url := "https://api.openai.com/v1/embeddings"
+	payload := strings.NewReader(fmt.Sprintf(`{"input": %q, "model": "text-embedding-ada-002"}`, text))
+
+	req, _ := http.NewRequest("POST", url, payload)
+	req.Header.Set("Authorization", "Bearer "+OpenAIAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Failed to add chunks for '%v': %v", title, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
 	}
 
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	if len(result.Data) == 0 {
+		return nil, fmt.Errorf("no embeddings returned")
+	}
+
+	return result.Data[0].Embedding, nil
 }
 
 func chunkText(text string) []string {
@@ -106,4 +168,9 @@ func chunkText(text string) []string {
 		}
 	}
 	return chunks
+}
+
+func DeleteEmbeddings(ctx context.Context, message_id string) {
+	DbPool.Exec(ctx, "DELETE FROM chunks WHERE message_id = $1", message_id)
+	log.Printf("Deleted chunks from message: %s", message_id)
 }
