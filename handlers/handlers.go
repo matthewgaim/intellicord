@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/ai"
@@ -22,7 +23,7 @@ func CommandLookupHandler() func(s *discordgo.Session, i *discordgo.InteractionC
 func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Session, r *discordgo.Ready) {
 	return func(s *discordgo.Session, r *discordgo.Ready) {
 		for _, g := range r.Guilds {
-			log.Printf("Commands for Server: %s\n", g.ID)
+			log.Printf("Registering commands for existing server: %s\n", g.ID)
 			guilds.RegisterCommandsForGuild(dg, g.ID, commands)
 		}
 		dg.UpdateCustomStatus("Upload a file to any channel, or type /ask to use Intellicord")
@@ -31,8 +32,11 @@ func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Se
 
 func BotAddedToServerHandler() func(s *discordgo.Session, g *discordgo.GuildCreate) {
 	return func(s *discordgo.Session, g *discordgo.GuildCreate) {
-		log.Printf("Joined a new server: %s (ID: %s)", g.Name, g.ID)
-		guilds.RegisterCommandsForGuild(s, g.ID, commands)
+		// needed bc GuildCreate is triggered when joining guild and bot startup
+		if time.Since(g.JoinedAt) < time.Minute {
+			log.Printf("Joined a new server: %s %s (Owner ID: %s)", g.Name, g.ID, g.OwnerID)
+			guilds.RegisterCommandsForGuild(s, g.ID, commands)
+		}
 	}
 }
 
