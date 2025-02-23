@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/matthewgaim/intellicord/ai"
+	"github.com/matthewgaim/intellicord/db"
 	"github.com/matthewgaim/intellicord/guilds"
 	"github.com/matthewgaim/intellicord/handlers"
 )
@@ -63,6 +66,8 @@ func main() {
 		log.Fatal("Bot user is not initialized")
 	}
 
+	go startAPIServer()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	log.Println("Press Ctrl+C to exit")
@@ -73,4 +78,27 @@ func main() {
 		guilds.DeleteCommandsForGuild(dg, g.ID)
 	}
 	log.Println("Gracefully shutting down.")
+}
+
+type User struct {
+	UserID string `json:"user_id"`
+}
+
+func startAPIServer() {
+	router := gin.Default()
+
+	router.POST("/adduser", func(c *gin.Context) {
+		var user User
+		if err := c.ShouldBindJSON(&user); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		db.AddUserToDB(user.UserID)
+		c.JSON(http.StatusCreated, gin.H{"message": "User added successfully"})
+	})
+
+	log.Println("Starting API on port 8080")
+	if err := router.Run(":8080"); err != nil {
+		log.Fatalf("Error starting API server: %v", err)
+	}
 }

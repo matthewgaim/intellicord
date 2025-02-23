@@ -8,6 +8,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/ai"
+	"github.com/matthewgaim/intellicord/db"
 	"github.com/matthewgaim/intellicord/guilds"
 	"github.com/openai/openai-go"
 )
@@ -34,7 +35,11 @@ func BotAddedToServerHandler() func(s *discordgo.Session, g *discordgo.GuildCrea
 	return func(s *discordgo.Session, g *discordgo.GuildCreate) {
 		// needed bc GuildCreate is triggered when joining guild and bot startup
 		if time.Since(g.JoinedAt) < time.Minute {
-			log.Printf("Joined a new server: %s %s (Owner ID: %s)", g.Name, g.ID, g.OwnerID)
+			guildName := g.Name
+			guildID := g.ID
+			guildOwnerID := g.OwnerID
+			log.Printf("Joined a new server: %s %s (Owner ID: %s)", guildName, guildID, guildOwnerID)
+			db.AddGuildToDB(guildID, guildOwnerID)
 			guilds.RegisterCommandsForGuild(s, g.ID, commands)
 		}
 	}
