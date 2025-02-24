@@ -97,6 +97,23 @@ func startAPIServer() {
 		c.JSON(http.StatusCreated, gin.H{"message": "User added successfully"})
 	})
 
+	router.GET("/get-joined-servers", func(c *gin.Context) {
+		user_id := c.Query("user_id")
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No user_id"})
+			return
+		}
+
+		joinedServers, err := db.GetRegisteredServers(user_id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		log.Printf("%+v", joinedServers)
+		c.JSON(http.StatusOK, joinedServers)
+	})
+
 	log.Println("Starting API on port 8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Error starting API server: %v", err)
