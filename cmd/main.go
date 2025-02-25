@@ -43,10 +43,10 @@ func main() {
 	// Register commands when bot is ready
 	dg.AddHandler(handlers.BotReadyRegisterCommandsHandler(dg))
 
-	// Bot added to new server (doesnt work)
+	// Bot added to new server
 	dg.AddHandler(handlers.BotAddedToServerHandler())
 
-	// Bot removed from server (doesnt work)
+	// Bot removed from server
 	dg.AddHandler(handlers.BotRemovedFromServerHandler())
 
 	// Respond to user in a bot-created thread

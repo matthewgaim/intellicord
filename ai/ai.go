@@ -55,7 +55,7 @@ func InitAI() {
 	}
 }
 
-func ChunkAndVectorize(ctx context.Context, message_id string, doc string, title string, doc_url string) {
+func ChunkAndVectorize(ctx context.Context, message_id string, doc string, title string, doc_url string, discord_server_id string) {
 	chunks := chunkText(doc)
 	for _, chunk := range chunks {
 		embedding, err := getEmbedding(chunk)
@@ -63,7 +63,7 @@ func ChunkAndVectorize(ctx context.Context, message_id string, doc string, title
 			log.Fatalf("Error generating embedding for chunk: %v", err)
 		}
 
-		_, err = DbPool.Exec(ctx, "INSERT INTO chunks (message_id, title, doc_url, content, embedding) VALUES ($1, $2, $3, $4, $5)", message_id, title, doc_url, chunk, pgvector.NewVector(embedding))
+		_, err = DbPool.Exec(ctx, "INSERT INTO chunks (message_id, title, doc_url, content, embedding, discord_server_id) VALUES ($1, $2, $3, $4, $5, $6)", message_id, title, doc_url, chunk, pgvector.NewVector(embedding), discord_server_id)
 		if err != nil {
 			log.Fatalf("Failed to add chunk for '%v': %v", title, err)
 		}

@@ -49,6 +49,7 @@ func BotRemovedFromServerHandler() func(s *discordgo.Session, g *discordgo.Guild
 	return func(s *discordgo.Session, g *discordgo.GuildDelete) {
 		log.Printf("Removed from server: %s (ID: %s)", g.Guild.Name, g.Guild.ID)
 		guilds.DeleteCommandsForGuild(s, g.Guild.ID)
+		db.RemoveGuildFromDB(g.Guild.ID)
 	}
 }
 
@@ -132,8 +133,8 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 				log.Printf("Error getting file text: %v", err)
 				continue
 			}
-
-			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink)
+			discord_server_id := m.GuildID
+			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id)
 			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)

@@ -22,6 +22,20 @@ func AddGuildToDB(guildID string, guildOwnerID string) {
 	}
 }
 
+func RemoveGuildFromDB(guildID string) {
+	_, err := ai.DbPool.Exec(context.Background(), `
+	DELETE FROM joined_servers WHERE discord_server_id = $1`, guildID)
+	if err != nil {
+		log.Printf("Error removing guild from DB: %v", err)
+	}
+
+	_, err = ai.DbPool.Exec(context.Background(), `
+	DELETE FROM chunks WHERE discord_server_id = $1`, guildID)
+	if err != nil {
+		log.Printf("Error removing chunks from DB: %v", err)
+	}
+}
+
 func AddUserToDB(userID string) {
 	_, err := ai.DbPool.Exec(context.Background(), `
 		INSERT INTO users (discord_id) VALUES ($1) ON CONFLICT DO NOTHING
