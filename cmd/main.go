@@ -113,6 +113,21 @@ func startAPIServer() {
 		c.JSON(http.StatusOK, joinedServers)
 	})
 
+	router.GET("/analytics/files-all-servers", func(c *gin.Context) {
+		user_id := c.Query("user_id")
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No user_id"})
+			return
+		}
+
+		totalFilesAnalyzed, fileNames, err := db.FileAnalysisAllServers(user_id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"files_analyzed": totalFilesAnalyzed, "file_details": fileNames})
+	})
+
 	log.Println("Starting API on port 8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Error starting API server: %v", err)

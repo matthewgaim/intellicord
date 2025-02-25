@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -97,6 +98,56 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 	}
 
 	return serversInfo, nil
+}
+
+type FileInformation struct {
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Size         string `json:"size"`
+	AnalyzedDate string `json:"analyzed_date"`
+}
+
+func FileAnalysisAllServers(user_id string) (int, []FileInformation, error) {
+	rows, err := ai.DbPool.Query(context.Background(), `
+        SELECT c.discord_server_id, c.title, COUNT(DISTINCT c.doc_url) AS total_files
+        FROM chunks c
+        JOIN joined_servers js ON c.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1
+        GROUP BY c.discord_server_id, c.title
+        ORDER BY total_files DESC
+    `, user_id)
+	if err != nil {
+		log.Printf("Error fetching total files per server: %v", err)
+		return 0, nil, err
+	}
+	defer rows.Close()
+
+	filesPerServer := 0
+	var fileNames = []FileInformation{}
+
+	for rows.Next() {
+		var serverID string
+		var title string
+		var totalFiles int
+		if err := rows.Scan(&serverID, &title, &totalFiles); err != nil {
+			log.Printf("Error scanning row: %v", err)
+			return 0, nil, err
+		}
+
+		filesPerServer += totalFiles
+		titleSplit := strings.Split(title, ".")
+		fileType := strings.ToUpper(titleSplit[len(titleSplit)-1])
+
+		var fileInfo = FileInformation{
+			Name:         title,
+			Type:         fileType,
+			Size:         "500 MB",
+			AnalyzedDate: "Yesterday",
+		}
+		fileNames = append(fileNames, fileInfo)
+	}
+
+	return filesPerServer, fileNames, nil
 }
 
 func getServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild, error) {
