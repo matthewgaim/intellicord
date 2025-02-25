@@ -110,7 +110,6 @@ func startAPIServer() {
 			return
 		}
 
-		log.Printf("%+v", joinedServers)
 		c.JSON(http.StatusOK, joinedServers)
 	})
 
