@@ -55,8 +55,22 @@ func InitAI() {
 	}
 }
 
-func ChunkAndVectorize(ctx context.Context, message_id string, doc string, title string, doc_url string, discord_server_id string) {
-	chunks := chunkText(doc)
+func ChunkAndVectorize(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
+	_, err := DbPool.Exec(context.Background(), `
+	INSERT INTO uploaded_files (
+		discord_server_id,
+		channel_id,
+		uploader_id,
+		title,
+		file_url,
+		file_size
+	) VALUES ($1, $2, $3, $4, $5, $6)
+	`, discord_server_id, channelID, uploader_id, title, doc_url, fileSize)
+	if err != nil {
+		log.Printf("Error uploading to uploaded_files: %v", err)
+		return
+	}
+	chunks := chunkText(content)
 	for _, chunk := range chunks {
 		embedding, err := getEmbedding(chunk)
 		if err != nil {

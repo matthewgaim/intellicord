@@ -1,5 +1,18 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
+CREATE TABLE IF NOT EXISTS uploaded_files (
+    id SERIAL PRIMARY KEY,
+    discord_server_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    uploader_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    file_size BIGINT NOT NULL,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (discord_server_id) REFERENCES joined_servers(discord_server_id) ON DELETE CASCADE,
+    FOREIGN KEY (uploader_id) REFERENCES users(discord_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chunks (
     id SERIAL PRIMARY KEY,
     message_id TEXT,
