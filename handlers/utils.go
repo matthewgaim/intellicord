@@ -13,6 +13,7 @@ import (
 
 type ExtractedTextResponse struct {
 	ExtractedText string `json:"extracted_text"`
+	FileSize      int    `json:"file_size"`
 }
 
 const (
@@ -75,34 +76,34 @@ func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]o
 	return history, nil
 }
 
-func getFileText(pdfURL string) (string, error) {
+func getFileTextAndSize(pdfURL string) (string, int, error) {
 	payload := map[string]string{"file_url": pdfURL}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("failed to create JSON payload: %v", err)
+		return "", 0, fmt.Errorf("failed to create JSON payload: %v", err)
 	}
 
 	resp, err := http.Post(PARSER_API_URL, "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		return "", fmt.Errorf("failed to make request: %v", err)
+		return "", 0, fmt.Errorf("failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %v", err)
+		return "", 0, fmt.Errorf("failed to read response: %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("error from server: %s", body)
+		return "", 0, fmt.Errorf("error from server: %s", body)
 	}
 
 	var result ExtractedTextResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse JSON response: %v", err)
+		return "", 0, fmt.Errorf("failed to parse JSON response: %v", err)
 	}
 
-	return result.ExtractedText, nil
+	return result.ExtractedText, result.FileSize, nil
 }
 
 func getRootMessageOfThread(s *discordgo.Session, channel *discordgo.Channel) (message *discordgo.Message, err error) {

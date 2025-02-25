@@ -60,6 +60,7 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 		}
 
 		channel, err := s.Channel(m.ChannelID)
+		s.ChannelTyping(channel.ID)
 		if err != nil {
 			log.Println("Error fetching channel:", err)
 			return
@@ -122,19 +123,19 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			log.Printf("Error creating thread: %v", err)
 			return
 		}
-
+		s.ChannelTyping(thread.ID)
 		for i, attachment := range m.Attachments {
 			attachmentLink := attachment.URL
 			filename := attachment.Filename
 			log.Printf("Attachment %d: %s (%s)", i, filename, attachmentLink)
 
-			fileText, err := getFileText(attachmentLink)
+			fileText, fileSize, err := getFileTextAndSize(attachmentLink)
 			if err != nil {
 				log.Printf("Error getting file text: %v", err)
 				continue
 			}
 			discord_server_id := m.GuildID
-			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id)
+			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id, fileSize, thread.ID, m.Author.ID)
 			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
