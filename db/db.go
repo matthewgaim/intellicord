@@ -103,51 +103,74 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 type FileInformation struct {
 	Name         string `json:"name"`
 	Type         string `json:"type"`
-	Size         string `json:"size"`
+	Size         int64  `json:"size"`
 	AnalyzedDate string `json:"analyzed_date"`
 }
 
-func FileAnalysisAllServers(user_id string) (int, []FileInformation, error) {
+func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, error) {
 	rows, err := ai.DbPool.Query(context.Background(), `
-        SELECT c.discord_server_id, c.title, COUNT(DISTINCT c.doc_url) AS total_files
-        FROM chunks c
-        JOIN joined_servers js ON c.discord_server_id = js.discord_server_id
-        WHERE js.owner_id = $1
-        GROUP BY c.discord_server_id, c.title
-        ORDER BY total_files DESC
+        SELECT DATE(uf.uploaded_at) AS upload_date, COUNT(uf.id) AS total_files, uf.title, uf.file_size
+        FROM uploaded_files uf
+        JOIN joined_servers js ON uf.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1 AND uf.uploaded_at >= NOW() - INTERVAL '7 days'
+        GROUP BY upload_date, uf.title, uf.file_size
+        ORDER BY upload_date DESC
     `, user_id)
 	if err != nil {
-		log.Printf("Error fetching total files per server: %v", err)
-		return 0, nil, err
+		log.Printf("Error fetching total files per day: %v", err)
+		return nil, nil, err
 	}
 	defer rows.Close()
 
-	filesPerServer := 0
-	var fileNames = []FileInformation{}
+	var filesPerDay []map[string]interface{}
+	var fileDetails []FileInformation
 
 	for rows.Next() {
-		var serverID string
-		var title string
+		var uploadDate time.Time
 		var totalFiles int
-		if err := rows.Scan(&serverID, &title, &totalFiles); err != nil {
+		var title string
+		var fileSize int64
+		if err := rows.Scan(&uploadDate, &totalFiles, &title, &fileSize); err != nil {
 			log.Printf("Error scanning row: %v", err)
-			return 0, nil, err
+			return nil, nil, err
 		}
 
-		filesPerServer += totalFiles
+		dateStr := uploadDate.Format("2006-01-02")
+		found := false
+
+		// Check if the date already exists in the array
+		for i, entry := range filesPerDay {
+			if entry["date"] == dateStr {
+				filesPerDay[i]["amount"] = entry["amount"].(int) + totalFiles
+				found = true
+				break
+			}
+		}
+
+		// If not found, append a new entry
+		if !found {
+			filesPerDay = append(filesPerDay, map[string]interface{}{
+				"date":   dateStr,
+				"amount": totalFiles,
+			})
+		}
+
 		titleSplit := strings.Split(title, ".")
 		fileType := strings.ToUpper(titleSplit[len(titleSplit)-1])
 
-		var fileInfo = FileInformation{
+		fileDetails = append(fileDetails, FileInformation{
 			Name:         title,
 			Type:         fileType,
-			Size:         "500 MB",
-			AnalyzedDate: "Yesterday",
-		}
-		fileNames = append(fileNames, fileInfo)
+			Size:         fileSize,
+			AnalyzedDate: dateStr,
+		})
 	}
-
-	return filesPerServer, fileNames, nil
+	if len(filesPerDay) < 7 {
+		for i := len(filesPerDay); i < 8; i++ {
+			filesPerDay = append(filesPerDay, map[string]interface{}{"amount": 0, "date": "N/A"})
+		}
+	}
+	return filesPerDay, fileDetails, nil
 }
 
 func getServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild, error) {
