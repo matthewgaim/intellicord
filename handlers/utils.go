@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/bwmarrin/discordgo"
@@ -27,7 +26,7 @@ const (
 		- Avoid excessive formality or technical jargon unless specifically relevant
 
 		2. RESPONSE FORMAT
-		- Keep responses under 2000 characters (Discord's message limit)
+		- Keep responses as short as you possibly can, but if they need to be longer keep them under 2000 characters including formatting (Discord's message limit)
 		- Prioritize brevity without sacrificing essential information
 		- Use Markdown formatting where appropriate:
 		* Code blocks with language specification
@@ -61,24 +60,16 @@ func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]o
 	if err != nil {
 		return nil, fmt.Errorf("error fetching messages: %w", err)
 	}
+
 	var history []openai.ChatCompletionMessageParamUnion
-	log.Println("\n\nThread History")
 	var msg *discordgo.Message
 	history = append(history, openai.SystemMessage(SYSTEM_PROMPT))
 	for i := len(msgs) - 1; i >= 0; i-- {
 		msg = msgs[i]
 		if msg.Author.ID == botID {
-			if len(msg.Attachments) > 0 {
-				log.Printf("Bot's Attachments: %d\n", len(msg.Attachments))
-			}
-			log.Printf("Bot (Type %d): %v\n", msg.Type, msg.Content)
 			history = append(history, openai.AssistantMessage(msg.Content))
 		} else {
-			if len(msg.Attachments) > 0 {
-				log.Printf("User's Attachments: %d\n", len(msg.Attachments))
-			}
-			log.Printf("User (Type %d): %v\n", msg.Type, msg.Content)
-			history = append(history, openai.UserMessage(msg.Content))
+			history = append(history, openai.UserMessage(fmt.Sprintf("%s: %s", msg.Author.Username, msg.Content)))
 		}
 	}
 	return history, nil
