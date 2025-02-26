@@ -135,7 +135,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 			return nil, nil, err
 		}
 
-		dateStr := uploadDate.Format("2006-01-02")
+		dateStr := uploadDate.Format("01/02")
 		found := false
 
 		// Check if the date already exists in the array
