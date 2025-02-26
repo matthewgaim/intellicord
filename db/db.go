@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -170,6 +171,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 			filesPerDay = append(filesPerDay, map[string]interface{}{"amount": 0, "date": "N/A"})
 		}
 	}
+	slices.Reverse(filesPerDay)
 	return filesPerDay, fileDetails, nil
 }
 
