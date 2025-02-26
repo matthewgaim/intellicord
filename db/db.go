@@ -108,7 +108,7 @@ type FileInformation struct {
 	AnalyzedDate string `json:"analyzed_date"`
 }
 
-func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, error) {
+func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, int, error) {
 	rows, err := ai.DbPool.Query(context.Background(), `
         SELECT DATE(uf.uploaded_at) AS upload_date, COUNT(uf.id) AS total_files, uf.title, uf.file_size
         FROM uploaded_files uf
@@ -119,7 +119,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
     `, user_id)
 	if err != nil {
 		log.Printf("Error fetching total files per day: %v", err)
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	defer rows.Close()
 
@@ -133,7 +133,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 		var fileSize int64
 		if err := rows.Scan(&uploadDate, &totalFiles, &title, &fileSize); err != nil {
 			log.Printf("Error scanning row: %v", err)
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 
 		dateStr := uploadDate.Format("01/02")
@@ -172,7 +172,22 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 		}
 	}
 	slices.Reverse(filesPerDay)
-	return filesPerDay, fileDetails, nil
+
+	// total messages across all owned servers
+	var totalMessages int
+	err = ai.DbPool.QueryRow(context.Background(), `
+        SELECT COUNT(ml.id) 
+        FROM message_logs ml
+        JOIN joined_servers js ON ml.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1
+    `, user_id).Scan(&totalMessages)
+
+	if err != nil {
+		log.Printf("Error fetching total messages: %v", err)
+		return filesPerDay, fileDetails, 0, err
+	}
+
+	return filesPerDay, fileDetails, totalMessages, nil
 }
 
 func getServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild, error) {
@@ -206,4 +221,16 @@ func getServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild,
 	}
 
 	return target, nil
+}
+
+func AddMessageLog(message_id string, discord_server_id string, channel_id string, user_id string) {
+	_, err := ai.DbPool.Exec(context.Background(), `
+	INSERT INTO message_logs 
+		(message_id, discord_server_id, channel_id, user_id)
+	VALUES
+		($1, $2, $3, $4)
+	`, message_id, discord_server_id, channel_id, user_id)
+	if err != nil {
+		log.Printf("Error logging message: %v", err)
+	}
 }

@@ -86,6 +86,7 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				if err != nil {
 					log.Printf("Error getting root message: %v", err)
 				}
+				db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 				numOfAttachments := len(rootMsg.Attachments)
 				rootMsgID := rootMsg.ID
 				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)

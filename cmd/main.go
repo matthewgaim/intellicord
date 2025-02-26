@@ -120,12 +120,12 @@ func startAPIServer() {
 			return
 		}
 
-		totalFilesAnalyzed, fileNames, err := db.FileAnalysisAllServers(user_id)
+		totalFilesAnalyzed, fileNames, totalMessagesCount, err := db.FileAnalysisAllServers(user_id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"files_analyzed": totalFilesAnalyzed, "file_details": fileNames})
+		c.JSON(http.StatusOK, gin.H{"files_analyzed": totalFilesAnalyzed, "file_details": fileNames, "total_messages_count": totalMessagesCount})
 	})
 
 	log.Println("Starting API on port 8080")
