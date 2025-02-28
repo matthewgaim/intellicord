@@ -47,15 +47,6 @@ func AddUserToDB(userID string) {
 	}
 }
 
-type JoinedServersInfo struct {
-	ID              int    `json:"id"`
-	DiscordServerID string `json:"discord_server_id"`
-	JoinedAt        string `json:"joined_at"`
-	Name            string `json:"name"`
-	MemberCount     int    `json:"member_count"`
-	Icon            string `json:"icon"`
-}
-
 func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 	rows, err := ai.DbPool.Query(context.Background(), `
     SELECT id, discord_server_id, joined_at FROM joined_servers WHERE owner_id = $1
@@ -99,13 +90,6 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 	}
 
 	return serversInfo, nil
-}
-
-type FileInformation struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Size         int64  `json:"size"`
-	AnalyzedDate string `json:"analyzed_date"`
 }
 
 func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, int, error) {
