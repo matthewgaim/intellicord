@@ -109,6 +109,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 
 	var filesPerDay []map[string]interface{}
 	var fileDetails []FileInformation
+	dateFileUploadedData := make(map[string]int) // To track days with file uploads
 
 	for rows.Next() {
 		var uploadDate time.Time
@@ -121,24 +122,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 		}
 
 		dateStr := uploadDate.Format("01/02")
-		found := false
-
-		// Check if the date already exists in the array
-		for i, entry := range filesPerDay {
-			if entry["date"] == dateStr {
-				filesPerDay[i]["amount"] = entry["amount"].(int) + totalFiles
-				found = true
-				break
-			}
-		}
-
-		// If not found, append a new entry
-		if !found {
-			filesPerDay = append(filesPerDay, map[string]interface{}{
-				"date":   dateStr,
-				"amount": totalFiles,
-			})
-		}
+		dateFileUploadedData[dateStr] += totalFiles
 
 		titleSplit := strings.Split(title, ".")
 		fileType := strings.ToUpper(titleSplit[len(titleSplit)-1])
@@ -150,10 +134,21 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 			AnalyzedDate: dateStr,
 		})
 	}
-	if len(filesPerDay) < 7 {
-		for i := len(filesPerDay); i < 8; i++ {
-			filesPerDay = append(filesPerDay, map[string]interface{}{"amount": 0, "date": "N/A"})
+
+	// Generate the last 7 days and fill missing days with 0
+	for i := 0; i < 7; i++ {
+		date := time.Now().AddDate(0, 0, -i)
+		formatted := date.Format("01/02")
+
+		amount, exists := dateFileUploadedData[formatted]
+		if !exists {
+			amount = 0
 		}
+
+		filesPerDay = append(filesPerDay, map[string]interface{}{
+			"date":   formatted,
+			"amount": amount,
+		})
 	}
 	slices.Reverse(filesPerDay)
 
