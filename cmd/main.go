@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/matthewgaim/intellicord/ai"
-	"github.com/matthewgaim/intellicord/db"
-	"github.com/matthewgaim/intellicord/guilds"
-	"github.com/matthewgaim/intellicord/handlers"
+	"github.com/matthewgaim/intellicord/internal/ai"
+	"github.com/matthewgaim/intellicord/internal/db"
+	"github.com/matthewgaim/intellicord/internal/guilds"
+	"github.com/matthewgaim/intellicord/internal/handlers"
 )
 
 var dg *discordgo.Session

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/matthewgaim/intellicord/ai"
-	"github.com/matthewgaim/intellicord/db"
-	"github.com/matthewgaim/intellicord/guilds"
+	"github.com/matthewgaim/intellicord/internal/ai"
+	"github.com/matthewgaim/intellicord/internal/db"
+	"github.com/matthewgaim/intellicord/internal/guilds"
 	"github.com/openai/openai-go"
 )
 

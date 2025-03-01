@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/matthewgaim/intellicord/ai"
+	"github.com/matthewgaim/intellicord/internal/ai"
 )
 
 func AddGuildToDB(guildID string, guildOwnerID string) {
