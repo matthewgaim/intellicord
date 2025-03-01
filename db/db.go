@@ -85,7 +85,10 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 			JoinedAt:        joined_at.String(),
 			Name:            server_info.Name,
 			MemberCount:     server_info.ApproximateMemberCount,
+			OnlineCount:     server_info.ApproximatePresenceCount,
 			Icon:            server_info.IconURL("512x512"),
+			PremiumTier:     int(server_info.PremiumTier),
+			Banner:          server_info.BannerURL("512x512"),
 		})
 	}
 

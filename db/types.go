@@ -6,7 +6,10 @@ type JoinedServersInfo struct {
 	JoinedAt        string `json:"joined_at"`
 	Name            string `json:"name"`
 	MemberCount     int    `json:"member_count"`
+	OnlineCount     int    `json:"online_count"`
 	Icon            string `json:"icon"`
+	PremiumTier     int    `json:"premium_tier"`
+	Banner          string `json:"banner"`
 }
 
 type FileInformation struct {
