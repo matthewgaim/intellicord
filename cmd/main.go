@@ -84,6 +84,12 @@ type User struct {
 	UserID string `json:"user_id"`
 }
 
+type UpdateAllowedChannelsRequest struct {
+	ChannelIDs []string `json:"channel_ids"`
+	ServerID   string   `json:"server_id"`
+	UserID     string   `json:"user_id"`
+}
+
 func startAPIServer() {
 	router := gin.Default()
 
@@ -126,6 +132,35 @@ func startAPIServer() {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"files_analyzed": totalFilesAnalyzed, "file_details": fileNames, "total_messages_count": totalMessagesCount})
+	})
+
+	router.POST("/update-allowed-channels", func(c *gin.Context) {
+		var requestBody UpdateAllowedChannelsRequest
+		if err := c.ShouldBindJSON(&requestBody); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := db.UpdateAllowedChannels(requestBody.ChannelIDs, requestBody.ServerID); err != nil {
+			log.Printf("Error updating allowed channels: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "ok"})
+	})
+
+	router.GET("/get-allowed-channels", func(c *gin.Context) {
+		server_id := c.Query("server_id")
+		if server_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No server_id"})
+			return
+		}
+
+		allowedChannels, err := db.GetAllowedChannels(server_id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"allowed_channels": allowedChannels})
 	})
 
 	log.Println("Starting API on port 8080")

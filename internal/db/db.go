@@ -216,3 +216,29 @@ func AddMessageLog(message_id string, discord_server_id string, channel_id strin
 		log.Printf("Error logging message: %v", err)
 	}
 }
+
+func UpdateAllowedChannels(allowedChannels []string, serverID string) error {
+	query := `
+		UPDATE joined_servers
+		SET allowed_channels = $1
+		WHERE discord_server_id = $2
+		RETURNING allowed_channels
+	`
+
+	_, err := ai.DbPool.Exec(context.Background(), query, allowedChannels, serverID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetAllowedChannels(serverID string) ([]string, error) {
+	var allowedChannels []string
+	query := `SELECT allowed_channels FROM joined_servers WHERE discord_server_id = $1`
+	err := ai.DbPool.QueryRow(context.Background(), query, serverID).Scan(&allowedChannels)
+	if err != nil {
+		return nil, err
+	}
+
+	return allowedChannels, nil
+}

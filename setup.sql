@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS joined_servers (
     discord_server_id TEXT UNIQUE NOT NULL,
     owner_id TEXT NOT NULL,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    allowed_channels TEXT[] DEFAULT '{}',
     FOREIGN KEY (owner_id) REFERENCES users(discord_id) ON DELETE CASCADE
 );
 
