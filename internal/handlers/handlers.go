@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -104,6 +105,16 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if len(m.Attachments) == 0 {
+			return
+		}
+		allowedChannels, err := db.GetAllowedChannels(m.GuildID)
+		if err != nil {
+			log.Printf("Error fetching allowed channels: %v", err)
+			return
+		}
+		if !slices.Contains(allowedChannels, m.ChannelID) {
+			log.Println("Not an allowed channel!")
+			s.ChannelMessageDelete(m.ChannelID, m.Message.ID)
 			return
 		}
 

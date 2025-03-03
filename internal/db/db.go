@@ -70,8 +70,6 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 			return nil, err
 		}
 
-		log.Println("Discord Server ID", discord_server_id)
-
 		// Fetch guild info only if necessary
 		server_info, err := getServerInfo(discord_server_id, BOT_TOKEN)
 		if err != nil {
@@ -179,7 +177,6 @@ func getServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild,
 		log.Printf("Error creating request: %v", err)
 		return discordgo.Guild{}, err
 	}
-	log.Println(BOT_TOKEN)
 	req.Header.Set("Authorization", BOT_TOKEN)
 	req.Header.Set("Content-Type", "application/json")
 
