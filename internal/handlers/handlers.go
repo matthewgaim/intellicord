@@ -28,7 +28,7 @@ func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Se
 			log.Printf("Registering commands for existing server: %s\n", g.ID)
 			guilds.RegisterCommandsForGuild(dg, g.ID, commands)
 		}
-		dg.UpdateCustomStatus("Upload a file to any channel, or type /ask to use Intellicord")
+		dg.UpdateCustomStatus("Upload a file, or type /ask to use Intellicord")
 	}
 }
 
