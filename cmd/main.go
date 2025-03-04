@@ -160,7 +160,13 @@ func startAPIServer() {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"allowed_channels": allowedChannels})
+		var BOT_TOKEN = fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN"))
+		server_info, err := db.GetServerInfo(server_id, BOT_TOKEN)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"allowed_channels": allowedChannels, "server_info": server_info})
 	})
 
 	log.Println("Starting API on port 8080")

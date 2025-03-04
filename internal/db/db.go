@@ -71,7 +71,7 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 		}
 
 		// Fetch guild info only if necessary
-		server_info, err := getServerInfo(discord_server_id, BOT_TOKEN)
+		server_info, err := GetServerInfo(discord_server_id, BOT_TOKEN)
 		if err != nil {
 			log.Printf("Error getting server info: %v", err)
 			return []JoinedServersInfo{}, err
@@ -170,7 +170,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 	return filesPerDay, fileDetails, totalMessages, nil
 }
 
-func getServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild, error) {
+func GetServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild, error) {
 	guildUrl := fmt.Sprintf("https://discord.com/api/v10/guilds/%s?with_counts=true", discord_server_id)
 	req, err := http.NewRequest("GET", guildUrl, nil)
 	if err != nil {
