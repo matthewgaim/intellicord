@@ -61,13 +61,14 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 		}
 
 		channel, err := s.Channel(m.ChannelID)
-		s.ChannelTyping(channel.ID)
 		if err != nil {
 			log.Println("Error fetching channel:", err)
 			return
 		}
 
 		if channel.Type == discordgo.ChannelTypeGuildPublicThread || channel.Type == discordgo.ChannelTypeGuildPrivateThread {
+			s.ChannelTyping(channel.ID)
+
 			// Don't recognize extra files in a thread
 			if len(m.Attachments) > 0 {
 				s.ChannelMessageDelete(channel.ID, m.Message.ID)
@@ -174,7 +175,6 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 			return
 		}
 
-		log.Println("StartThreadFromReferenceHandler()")
 		discord_server_id := m.GuildID
 		allowedChannels, err := db.GetAllowedChannels(discord_server_id)
 		if err != nil {
