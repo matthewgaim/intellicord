@@ -162,3 +162,62 @@ func AttachmentDeletedHandler() func(s *discordgo.Session, m *discordgo.MessageD
 		ai.DeleteEmbeddings(context.Background(), message_id)
 	}
 }
+
+func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		if m.Author.ID == s.State.User.ID || m.Type != discordgo.MessageTypeReply {
+			return
+		}
+
+		if m.Type == discordgo.MessageTypeReply && len(m.ReferencedMessage.Attachments) == 0 {
+			log.Println("No attachments")
+			return
+		}
+
+		log.Println("StartThreadFromReferenceHandler()")
+		discord_server_id := m.GuildID
+		allowedChannels, err := db.GetAllowedChannels(discord_server_id)
+		if err != nil {
+			log.Printf("Error fetching allowed channels: %v", err)
+			return
+		}
+		if !slices.Contains(allowedChannels, m.ChannelID) {
+			log.Println("Not an allowed channel!")
+			s.ChannelMessageDelete(m.ChannelID, m.Message.ID)
+			return
+		}
+
+		channel, err := s.Channel(m.ChannelID)
+		if err != nil {
+			log.Println("Error fetching channel:", err)
+			return
+		}
+		if channel.Type == discordgo.ChannelTypeGuildPublicThread || channel.Type == discordgo.ChannelTypeGuildPrivateThread {
+			log.Println("Documents wont be recognized in an existing thread")
+			return
+		}
+		data := &discordgo.ThreadStart{
+			Name: m.ReferencedMessage.Attachments[0].Filename,
+		}
+		thread, err := s.MessageThreadStartComplex(channel.ID, m.ID, data)
+		if err != nil {
+			log.Printf("Error creating thread: %v", err)
+			return
+		}
+		log.Println("MessageThreadStartComplex")
+		s.ChannelTyping(thread.ID)
+
+		history, err := GetThreadMessages(s, thread.ID, s.State.User.ID)
+		if err != nil {
+			log.Printf("Error getting thread messages: %v\n", err.Error())
+			return
+		}
+		res := ai.QueryVectorDB(context.Background(), m.Content, m.ReferencedMessage.ID, len(m.ReferencedMessage.Attachments))
+		history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
+		response := ai.LlmGenerateText(history, m.Content)
+		_, err = s.ChannelMessageSend(thread.ID, response)
+		if err != nil {
+			log.Println("Error sending message in thread:", err)
+		}
+	}
+}

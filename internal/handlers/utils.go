@@ -70,7 +70,8 @@ func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]o
 		if msg.Author.ID == botID {
 			history = append(history, openai.AssistantMessage(msg.Content))
 		} else {
-			history = append(history, openai.UserMessage(fmt.Sprintf("%s: %s", msg.Author.Username, msg.Content)))
+			user_msg := fmt.Sprintf("%s: %s", msg.Author.Username, msg.Content)
+			history = append(history, openai.UserMessage(user_msg))
 		}
 	}
 	return history, nil
@@ -110,6 +111,13 @@ func getRootMessageOfThread(s *discordgo.Session, channel *discordgo.Channel) (m
 	parentMessage, err := s.ChannelMessage(channel.ParentID, channel.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	if parentMessage.ReferencedMessage != nil {
+		replyMessage, err := s.ChannelMessage(parentMessage.ChannelID, parentMessage.ReferencedMessage.ID)
+		if err == nil {
+			return replyMessage, nil
+		}
 	}
 	return parentMessage, nil
 }

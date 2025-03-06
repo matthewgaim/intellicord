@@ -52,10 +52,14 @@ func main() {
 	// Respond to user in a bot-created thread
 	dg.AddHandler(handlers.BotRespondToThreadHandler())
 
-	// Listen for attachments
+	// Listen for new attachments
 	dg.AddHandler(handlers.StartThreadFromAttachmentUploadHandler())
 
+	// Listen for attachments deleted
 	dg.AddHandler(handlers.AttachmentDeletedHandler())
+
+	// Start a thread from 'Message Reply' to a message with attachments
+	dg.AddHandler(handlers.StartThreadFromReplyHandler())
 
 	dg.Identify.Intents = discordgo.IntentsAll
 	if err = dg.Open(); err != nil {
