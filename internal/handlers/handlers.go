@@ -39,7 +39,8 @@ func BotAddedToServerHandler() func(s *discordgo.Session, g *discordgo.GuildCrea
 			guildName := g.Name
 			guildID := g.ID
 			guildOwnerID := g.OwnerID
-			log.Printf("Joined a new server: %s %s (Owner ID: %s)", guildName, guildID, guildOwnerID)
+			message := fmt.Sprintf("Joined a new server: %s %s (Owner ID: %s)", guildName, guildID, guildOwnerID)
+			go NewDiscordWebhookMessage("https://discord.com/api/webhooks/1347311739573633064/rsRD8kaookveaDjAdp8DVUR20IdtsUyz6AV8_85YfB2n9MrKFsIgyS9q82nEGUXqPxyV", message)
 			db.AddGuildToDB(guildID, guildOwnerID)
 			guilds.RegisterCommandsForGuild(s, g.ID, commands)
 		}

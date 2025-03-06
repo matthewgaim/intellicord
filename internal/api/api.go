@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/matthewgaim/intellicord/internal/db"
+	"github.com/matthewgaim/intellicord/internal/handlers"
 )
 
 type User struct {
@@ -83,6 +84,7 @@ func addUser() gin.HandlerFunc {
 			return
 		}
 		db.AddUserToDB(user.UserID)
+		go handlers.NewDiscordWebhookMessage("https://discord.com/api/webhooks/1347312325148934194/RYvl2nyBxkGJnvpTExXkedMj_I1PW410kIAHJAwomDgi25zBUuKHDRixcqH1VmsRcIZ8", fmt.Sprintf("Login: %s", user.UserID))
 		c.JSON(http.StatusCreated, gin.H{"message": "User added successfully"})
 	}
 }

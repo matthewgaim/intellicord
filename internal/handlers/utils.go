@@ -121,3 +121,25 @@ func getRootMessageOfThread(s *discordgo.Session, channel *discordgo.Channel) (m
 	}
 	return parentMessage, nil
 }
+
+func NewDiscordWebhookMessage(webhookURL string, message string) {
+	// Define the message payload
+	payload := map[string]string{
+		"content": message,
+	}
+
+	// Convert payload to JSON
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Println("Error encoding JSON:", err)
+		return
+	}
+
+	// Send the POST request
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Println("Error sending request:", err)
+		return
+	}
+	defer resp.Body.Close()
+}
