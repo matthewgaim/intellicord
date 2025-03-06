@@ -80,7 +80,7 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 
-		firstMessage := fmt.Sprintf("Initial Message: %s", userMessage)
+		firstMessage := fmt.Sprintf("-# Initial Message: %s", userMessage)
 		_, err = s.ChannelMessageSend(thread.ID, firstMessage)
 		if err != nil {
 			fmt.Println("Error sending message in thread:", err)

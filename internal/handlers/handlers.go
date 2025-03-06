@@ -148,7 +148,7 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			}
 			discord_server_id := m.GuildID
 			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id, fileSize, thread.ID, m.Author.ID)
-			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("Processed content of %s", filename))
+			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("File '%s' is ready for analyzing", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
 			}
