@@ -16,6 +16,10 @@ type ExtractedTextResponse struct {
 	FileSize      int    `json:"file_size"`
 }
 
+type ExtractedErrorResponse struct {
+	Error string `json:"error"`
+}
+
 const (
 	PARSER_API_URL = "https://gs88488cwckgkcwc8s04owco.getaroomy.com/extract_text"
 	THREAD_LIMIT   = 20
@@ -96,7 +100,11 @@ func getFileTextAndSize(pdfURL string) (string, int, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("error from server: %s", body)
+		var result ExtractedErrorResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			return "", 0, fmt.Errorf("failed to parse JSON response: %v", err)
+		}
+		return "", 0, fmt.Errorf(result.Error)
 	}
 
 	var result ExtractedTextResponse

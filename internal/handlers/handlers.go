@@ -34,7 +34,7 @@ func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Se
 
 func BotAddedToServerHandler() func(s *discordgo.Session, g *discordgo.GuildCreate) {
 	return func(s *discordgo.Session, g *discordgo.GuildCreate) {
-		// needed bc GuildCreate is triggered when joining guild and bot startup
+		// needed bc GuildCreate is triggered when joining guild AND bot startup
 		if time.Since(g.JoinedAt) < time.Minute {
 			guildName := g.Name
 			guildID := g.ID
@@ -145,8 +145,17 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 
 			fileText, fileSize, err := getFileTextAndSize(attachmentLink)
 			if err != nil {
-				log.Printf("Error getting file text: %v", err)
-				continue
+				err_str := err.Error()
+				if err_str == "Unsupported file type" {
+					s.ChannelMessageSend(thread.ID, fmt.Sprintf("-# 🚨 File '%s' is an unsupported file type. It wont be analyzed.", filename))
+					continue
+				} else if err_str == "File too large" {
+					s.ChannelMessageSend(thread.ID, fmt.Sprintf("-# 🚨 File '%s' is too big.", filename))
+					continue
+				} else {
+					log.Printf("Error getting file text: %v", err)
+					continue
+				}
 			}
 			discord_server_id := m.GuildID
 			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id, fileSize, thread.ID, m.Author.ID)
