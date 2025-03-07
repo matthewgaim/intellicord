@@ -109,14 +109,15 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 		if len(m.Attachments) == 0 {
 			return
 		}
+
 		allowedChannels, err := db.GetAllowedChannels(m.GuildID)
 		if err != nil {
 			log.Printf("Error fetching allowed channels: %v", err)
 			return
 		}
+
+		// users can still upload files elsewhere, intellicord just wont do anything
 		if !slices.Contains(allowedChannels, m.ChannelID) {
-			log.Println("Not an allowed channel!")
-			s.ChannelMessageDelete(m.ChannelID, m.Message.ID)
 			return
 		}
 
@@ -179,9 +180,7 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 		if m.Author.ID == s.State.User.ID || m.Type != discordgo.MessageTypeReply {
 			return
 		}
-
 		if m.Type == discordgo.MessageTypeReply && len(m.ReferencedMessage.Attachments) == 0 {
-			log.Println("No attachments")
 			return
 		}
 
@@ -192,8 +191,6 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 			return
 		}
 		if !slices.Contains(allowedChannels, m.ChannelID) {
-			log.Println("Not an allowed channel!")
-			s.ChannelMessageDelete(m.ChannelID, m.Message.ID)
 			return
 		}
 
