@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
     file_size BIGINT NOT NULL,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (discord_server_id) REFERENCES joined_servers(discord_server_id),
-    FOREIGN KEY (uploader_id) REFERENCES users(discord_id)
 );
 
 CREATE TABLE IF NOT EXISTS message_logs (
@@ -46,5 +45,4 @@ CREATE TABLE IF NOT EXISTS message_logs (
     user_id TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (discord_server_id) REFERENCES joined_servers(discord_server_id),
-    FOREIGN KEY (user_id) REFERENCES users(discord_id)
 );
