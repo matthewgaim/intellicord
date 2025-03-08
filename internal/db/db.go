@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -91,20 +93,80 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 	return serversInfo, nil
 }
 
-func AnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, int, error) {
-	var err error
-	filesPerDay, err := getCountOfUploadsPerDayInWeek(user_id)
+func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, int, error) {
+	rows, err := ai.DbPool.Query(context.Background(), `
+        SELECT DATE(uf.uploaded_at) AS upload_date, COUNT(uf.id) AS total_files, uf.title, uf.file_size
+        FROM uploaded_files uf
+        JOIN joined_servers js ON uf.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1 AND uf.uploaded_at >= NOW() - INTERVAL '7 days'
+        GROUP BY upload_date, uf.title, uf.file_size
+        ORDER BY upload_date DESC
+    `, user_id)
 	if err != nil {
-		log.Printf("Error getCountOfUploadsPerDayInWeek: %v", err)
+		log.Printf("Error fetching total files per day: %v", err)
+		return nil, nil, 0, err
 	}
-	fileDetails, err := getFileDetails(user_id)
+	defer rows.Close()
+
+	var filesPerDay []map[string]interface{}
+	var fileDetails []FileInformation
+	dateFileUploadedData := make(map[string]int) // To track days with file uploads
+
+	for rows.Next() {
+		var uploadDate time.Time
+		var totalFiles int
+		var title string
+		var fileSize int64
+		if err := rows.Scan(&uploadDate, &totalFiles, &title, &fileSize); err != nil {
+			log.Printf("Error scanning row: %v", err)
+			return nil, nil, 0, err
+		}
+
+		dateStr := uploadDate.Format("01/02")
+		dateFileUploadedData[dateStr] += totalFiles
+
+		titleSplit := strings.Split(title, ".")
+		fileType := strings.ToUpper(titleSplit[len(titleSplit)-1])
+
+		fileDetails = append(fileDetails, FileInformation{
+			Name:         title,
+			Type:         fileType,
+			Size:         fileSize,
+			AnalyzedDate: dateStr,
+		})
+	}
+
+	// Generate the last 7 days and fill missing days with 0
+	for i := 0; i < 7; i++ {
+		date := time.Now().AddDate(0, 0, -i)
+		formatted := date.Format("01/02")
+
+		amount, exists := dateFileUploadedData[formatted]
+		if !exists {
+			amount = 0
+		}
+
+		filesPerDay = append(filesPerDay, map[string]interface{}{
+			"date":   formatted,
+			"amount": amount,
+		})
+	}
+	slices.Reverse(filesPerDay)
+
+	// total messages across all owned servers
+	var totalMessages int
+	err = ai.DbPool.QueryRow(context.Background(), `
+        SELECT COUNT(ml.id) 
+        FROM message_logs ml
+        JOIN joined_servers js ON ml.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1
+    `, user_id).Scan(&totalMessages)
+
 	if err != nil {
-		log.Printf("Error getFileDetails: %v", err)
+		log.Printf("Error fetching total messages: %v", err)
+		return filesPerDay, fileDetails, 0, err
 	}
-	totalMessages, err := getTotalMessages(user_id)
-	if err != nil {
-		log.Printf("Error getTotalMessages: %v", err)
-	}
+
 	return filesPerDay, fileDetails, totalMessages, nil
 }
 

@@ -116,7 +116,7 @@ func getFilesFromAllServers() gin.HandlerFunc {
 			return
 		}
 
-		totalFilesAnalyzed, fileNames, totalMessagesCount, err := db.AnalysisAllServers(user_id)
+		totalFilesAnalyzed, fileNames, totalMessagesCount, err := db.FileAnalysisAllServers(user_id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
