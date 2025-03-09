@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/openai/openai-go"
@@ -21,9 +22,8 @@ type ExtractedErrorResponse struct {
 }
 
 const (
-	PARSER_API_URL = "https://gs88488cwckgkcwc8s04owco.getaroomy.com/extract_text"
-	THREAD_LIMIT   = 20
-	SYSTEM_PROMPT  = `
+	THREAD_LIMIT  = 20
+	SYSTEM_PROMPT = `
 	You are Intellicord, a concise and knowledgeable Discord bot. Follow these principles:
 
 	1. Tone & Clarity
@@ -86,6 +86,7 @@ func getFileTextAndSize(pdfURL string) (string, int, error) {
 		return "", 0, fmt.Errorf("failed to create JSON payload: %v", err)
 	}
 
+	PARSER_API_URL := fmt.Sprintf("%s/extract_text", os.Getenv("PARSER_API_URL"))
 	resp, err := http.Post(PARSER_API_URL, "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to make request: %v", err)

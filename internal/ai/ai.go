@@ -103,20 +103,19 @@ func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAtt
 	if err != nil {
 		log.Fatal("Error generating query embedding:", err)
 	}
-	fmt.Printf("Attachments to query: %d", numOfAttachments)
 	rows, err := DbPool.Query(ctx, `
 		SELECT content, title, embedding <-> $1 AS distance 
 		FROM chunks 
 		WHERE message_id = $2
 		AND (embedding <-> $1) >= 0.5
 		ORDER BY distance 
-		LIMIT $3`, pgvector.NewVector(queryVector), rootMsgID, numOfAttachments)
+		LIMIT $3`, pgvector.NewVector(queryVector), rootMsgID, numOfAttachments+1)
 	if err != nil {
 		log.Fatal("Error querying nearest neighbors:", err)
 	}
 	defer rows.Close()
 	var context []string
-	if rows.Next() {
+	for rows.Next() {
 		var content string
 		var title string
 		var distance float32
@@ -126,9 +125,8 @@ func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAtt
 		}
 		content = fmt.Sprintf("%s: %s", title, content)
 		context = append(context, content)
-	} else {
-		return "No additional context found."
 	}
+	fmt.Printf("Relevant chunks: %d\n", len(context))
 	result := strings.Join(context, "\n")
 	return result
 }
