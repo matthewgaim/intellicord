@@ -239,3 +239,37 @@ func GetAllowedChannels(serverID string) ([]string, error) {
 
 	return allowedChannels, nil
 }
+
+func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string) error {
+	log.Println(userID, priceID, planName)
+	_, err := ai.DbPool.Exec(context.Background(), `
+		UPDATE users
+		SET price_id = $1, plan = $2
+		WHERE discord_id = $3`,
+		priceID, planName, userID)
+	if err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+
+type UserInfo struct {
+	PriceID  string    `json:"price_id"`
+	Plan     string    `json:"plan"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+func GetUserInfo(discordID string) (UserInfo, error) {
+	row := ai.DbPool.QueryRow(context.Background(), `
+		SELECT price_id, plan, joined_at FROM users WHERE discord_id = $1
+	`, discordID)
+	var price_id string
+	var plan string
+	var joined_at time.Time
+
+	if err := row.Scan(&price_id, &plan, &joined_at); err != nil {
+		return UserInfo{}, err
+	}
+	return UserInfo{PriceID: price_id, Plan: plan, JoinedAt: joined_at}, nil
+}

@@ -9,6 +9,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/matthewgaim/intellicord/internal/handlers"
+	"github.com/stripe/stripe-go/v81"
+	"github.com/stripe/stripe-go/v81/checkout/session"
+	"github.com/stripe/stripe-go/v81/product"
+	"github.com/stripe/stripe-go/v81/subscription"
 )
 
 type User struct {
@@ -63,14 +67,17 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 
 func StartAPIServer() {
 	router := gin.Default()
+	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 
 	router.Use(DiscordAuthMiddleware())
 	router.POST("/adduser", addUser())
+	router.GET("/get-user-info", getUserInfo())
 	router.GET("/get-joined-servers", getJoinedServers())
 	router.GET("/analytics/files-all-servers", getFilesFromAllServers())
 	router.POST("/update-allowed-channels", updateAllowedChannels())
 	router.GET("/get-allowed-channels", getAllowedChannels())
-
+	router.POST("/create-checkout-session", createCheckoutSession())
+	router.GET("/session-status", retrieveCheckoutSession())
 	log.Println("Starting API on port 8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Error starting API server: %v", err)
@@ -87,6 +94,23 @@ func addUser() gin.HandlerFunc {
 		db.AddUserToDB(user.UserID)
 		go handlers.NewDiscordWebhookMessage("https://discord.com/api/webhooks/1347312325148934194/RYvl2nyBxkGJnvpTExXkedMj_I1PW410kIAHJAwomDgi25zBUuKHDRixcqH1VmsRcIZ8", fmt.Sprintf("Login: %s (%s)", user.Username, user.UserID))
 		c.JSON(http.StatusCreated, gin.H{"message": "User added successfully"})
+	}
+}
+
+func getUserInfo() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user_id := c.Query("user_id")
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
+			return
+		}
+
+		user_info, err := db.GetUserInfo(user_id)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Error getting user info"})
+			return
+		}
+		c.JSON(http.StatusOK, user_info)
 	}
 }
 
@@ -161,5 +185,103 @@ func getAllowedChannels() gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"allowed_channels": allowedChannels, "server_info": server_info})
+	}
+}
+
+func createCheckoutSession() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		price_id := c.Query("price_id")
+		discord_id := c.Query("discord_id")
+		if price_id == "" || discord_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "price_id or discord_id is missing"})
+			return
+		}
+		domain := os.Getenv("INTELLICORD_FRONTEND_URL")
+		params := &stripe.CheckoutSessionParams{
+			UIMode:    stripe.String("embedded"),
+			ReturnURL: stripe.String(domain + "/dashboard/pricing/return?session_id={CHECKOUT_SESSION_ID}"),
+			LineItems: []*stripe.CheckoutSessionLineItemParams{
+				{
+					Price:    stripe.String(price_id),
+					Quantity: stripe.Int64(1),
+				},
+			},
+			SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{
+				Metadata: map[string]string{
+					"discord_id": discord_id,
+				},
+			},
+			Mode:         stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+			AutomaticTax: &stripe.CheckoutSessionAutomaticTaxParams{Enabled: stripe.Bool(true)},
+		}
+		s, err := session.New(params)
+
+		if err != nil {
+			log.Printf("session.New: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		type ClientSecret struct {
+			ClientSecret string `json:"clientSecret"`
+		}
+		c.JSON(http.StatusOK, ClientSecret{
+			ClientSecret: s.ClientSecret,
+		})
+	}
+}
+
+func retrieveCheckoutSession() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session_id := c.Query("session_id")
+		if session_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing session_id"})
+			return
+		}
+		s, err := session.Get(session_id, nil)
+		if err != nil {
+			log.Printf("session.Get error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if s.Status == "complete" {
+			if s.Subscription != nil {
+				subscriptionID := s.Subscription.ID
+				sub, err := subscription.Get(subscriptionID, nil)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Subscription not found"})
+					return
+				}
+
+				discord_id := sub.Metadata["discord_id"]
+				if len(sub.Items.Data) == 0 {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "No items found in subscription"})
+					return
+				}
+				priceID := sub.Items.Data[0].Price.ID
+				productID := sub.Items.Data[0].Plan.Product.ID
+				product, err := product.Get(productID, nil)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Product not found from given subscription"})
+					return
+				}
+				planName := product.Name
+				db.UpdateUsersPaidPlanStatus(discord_id, priceID, planName)
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Subscription not found in session"})
+				return
+			}
+
+		}
+
+		type CheckoutSessionType struct {
+			Status string `json:"status"`
+			Name   string `json:"name"`
+			Email  string `json:"email"`
+		}
+		c.JSON(http.StatusOK, CheckoutSessionType{
+			Status: string(s.Status),
+			Name:   string(s.CustomerDetails.Name),
+			Email:  string(s.CustomerDetails.Email),
+		})
 	}
 }

@@ -9,6 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/openai/openai-go v0.1.0-alpha.57
 	github.com/pgvector/pgvector-go v0.2.3
+	github.com/stripe/stripe-go/v81 v81.4.0
 )
 
 require (
