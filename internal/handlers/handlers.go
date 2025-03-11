@@ -69,6 +69,11 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 		}
 
 		if channel.Type == discordgo.ChannelTypeGuildPublicThread || channel.Type == discordgo.ChannelTypeGuildPrivateThread {
+			// ignore message in a non-bot created thread
+			if channel.OwnerID != s.State.User.ID {
+				return
+			}
+
 			s.ChannelTyping(channel.ID)
 
 			// Don't recognize extra files in a thread
