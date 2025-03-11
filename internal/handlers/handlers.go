@@ -57,7 +57,8 @@ func BotRemovedFromServerHandler() func(s *discordgo.Session, g *discordgo.Guild
 
 func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author.ID == s.State.User.ID {
+		// dont let bot respond to itself or other bots
+		if m.Author.Bot {
 			return
 		}
 
@@ -106,7 +107,7 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 
 func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		if len(m.Attachments) == 0 {
+		if len(m.Attachments) == 0 || m.Author.Bot {
 			return
 		}
 
@@ -177,7 +178,7 @@ func AttachmentDeletedHandler() func(s *discordgo.Session, m *discordgo.MessageD
 
 func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author.ID == s.State.User.ID || m.Type != discordgo.MessageTypeReply {
+		if m.Author.Bot || m.Type != discordgo.MessageTypeReply {
 			return
 		}
 		if m.Type == discordgo.MessageTypeReply && len(m.ReferencedMessage.Attachments) == 0 {
