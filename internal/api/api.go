@@ -283,6 +283,7 @@ func handleStripeWebhook() gin.HandlerFunc {
 		}
 		log.Printf("Event type: %s", event.Type)
 
+		// REMEMBER TO UPDATE ON WEBSITE IF YOU ADD MORE
 		switch event.Type {
 		case "invoice.payment_succeeded":
 			err, errType := invoicePaymentSucceeded(event)
