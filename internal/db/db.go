@@ -40,7 +40,7 @@ func RemoveGuildFromDB(guildID string) {
 
 func AddUserToDB(userID string) {
 	_, err := ai.DbPool.Exec(context.Background(), `
-		INSERT INTO users (discord_id) VALUES ($1) ON CONFLICT DO NOTHING
+		INSERT INTO users (discord_id, plan) VALUES ($1, 'free') ON CONFLICT DO NOTHING
 	`, userID)
 	if err != nil {
 		log.Printf("Error adding user to DB: %v", err)
