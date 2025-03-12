@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -101,17 +102,18 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAttachments int) string {
 	queryVector, err := getEmbedding(query)
 	if err != nil {
-		log.Fatal("Error generating query embedding:", err)
+		log.Println("Error generating query embedding:", err)
+		return ""
 	}
 	rows, err := DbPool.Query(ctx, `
 		SELECT content, title, embedding <-> $1 AS distance 
 		FROM chunks 
 		WHERE message_id = $2
-		AND (embedding <-> $1) <= 0.5
 		ORDER BY distance 
 		LIMIT $3`, pgvector.NewVector(queryVector), rootMsgID, numOfAttachments+1)
 	if err != nil {
-		log.Fatal("Error querying nearest neighbors:", err)
+		log.Println("Error querying nearest neighbors:", err)
+		return ""
 	}
 	defer rows.Close()
 	var context []string
@@ -121,12 +123,13 @@ func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAtt
 		var distance float32
 		err := rows.Scan(&content, &title, &distance)
 		if err != nil {
-			log.Fatal("Error scanning row:", err)
+			log.Println("Error scanning row:", err)
+			return ""
 		}
 		content = fmt.Sprintf("%s: %s", title, content)
 		context = append(context, content)
+		fmt.Printf("Relevant chunk found. Distance: %f\n", distance)
 	}
-	fmt.Printf("Relevant chunks: %d\n", len(context))
 	result := strings.Join(context, "\n")
 	return result
 }
@@ -135,16 +138,24 @@ func getEmbedding(text string) ([]float32, error) {
 	url := "https://api.openai.com/v1/embeddings"
 	payload := strings.NewReader(fmt.Sprintf(`{"input": %q, "model": "text-embedding-ada-002"}`, text))
 
-	req, _ := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequest("POST", url, payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+OpenAIAPIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("OpenAI API error: %s", string(body))
+	}
 
 	var result struct {
 		Data []struct {
@@ -153,7 +164,7 @@ func getEmbedding(text string) ([]float32, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	if len(result.Data) == 0 {
