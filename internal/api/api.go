@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -11,8 +12,7 @@ import (
 	"github.com/matthewgaim/intellicord/internal/handlers"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/checkout/session"
-	"github.com/stripe/stripe-go/v81/product"
-	"github.com/stripe/stripe-go/v81/subscription"
+	"github.com/stripe/stripe-go/v81/webhook"
 )
 
 type User struct {
@@ -69,15 +69,20 @@ func StartAPIServer() {
 	router := gin.Default()
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 
-	router.Use(DiscordAuthMiddleware())
-	router.POST("/adduser", addUser())
-	router.GET("/get-user-info", getUserInfo())
-	router.GET("/get-joined-servers", getJoinedServers())
-	router.GET("/analytics/files-all-servers", getFilesFromAllServers())
-	router.POST("/update-allowed-channels", updateAllowedChannels())
-	router.GET("/get-allowed-channels", getAllowedChannels())
-	router.POST("/create-checkout-session", createCheckoutSession())
-	router.GET("/session-status", retrieveCheckoutSession())
+	protectedRoutes := router.Group("/")
+	protectedRoutes.Use(DiscordAuthMiddleware())
+	{
+		protectedRoutes.POST("/adduser", addUser())
+		protectedRoutes.GET("/get-user-info", getUserInfo())
+		protectedRoutes.GET("/get-joined-servers", getJoinedServers())
+		protectedRoutes.GET("/analytics/files-all-servers", getFilesFromAllServers())
+		protectedRoutes.POST("/update-allowed-channels", updateAllowedChannels())
+		protectedRoutes.GET("/get-allowed-channels", getAllowedChannels())
+		protectedRoutes.POST("/create-checkout-session", createCheckoutSession())
+		protectedRoutes.GET("/session-status", retrieveCheckoutSession())
+	}
+	router.POST("/webhook", handleStripeWebhook())
+
 	log.Println("Starting API on port 8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Error starting API server: %v", err)
@@ -243,35 +248,6 @@ func retrieveCheckoutSession() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if s.Status == "complete" {
-			if s.Subscription != nil {
-				subscriptionID := s.Subscription.ID
-				sub, err := subscription.Get(subscriptionID, nil)
-				if err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": "Subscription not found"})
-					return
-				}
-
-				discord_id := sub.Metadata["discord_id"]
-				if len(sub.Items.Data) == 0 {
-					c.JSON(http.StatusBadRequest, gin.H{"error": "No items found in subscription"})
-					return
-				}
-				priceID := sub.Items.Data[0].Price.ID
-				productID := sub.Items.Data[0].Plan.Product.ID
-				product, err := product.Get(productID, nil)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Product not found from given subscription"})
-					return
-				}
-				planName := product.Name
-				db.UpdateUsersPaidPlanStatus(discord_id, priceID, planName)
-			} else {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Subscription not found in session"})
-				return
-			}
-
-		}
 
 		type CheckoutSessionType struct {
 			Status string `json:"status"`
@@ -283,5 +259,47 @@ func retrieveCheckoutSession() gin.HandlerFunc {
 			Name:   string(s.CustomerDetails.Name),
 			Email:  string(s.CustomerDetails.Email),
 		})
+	}
+}
+
+func handleStripeWebhook() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		const MaxBodyBytes = int64(65536)
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxBodyBytes)
+		payload, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading request body: %v\n", err)
+			c.Status(http.StatusServiceUnavailable)
+			return
+		}
+
+		stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+		event, err := webhook.ConstructEvent(payload, c.GetHeader("Stripe-Signature"), stripeWebhookSecret)
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error verifying webhook signature: %v\n", err)
+			c.Status(http.StatusBadRequest) // Return a 400 error on a bad signature
+			return
+		}
+		log.Printf("Event type: %s", event.Type)
+
+		switch event.Type {
+		case "invoice.payment_succeeded":
+			err, errType := invoicePaymentSucceeded(event)
+			if err != nil {
+				c.JSON(errType, gin.H{"error": err.Error()})
+			}
+			return
+		case "customer.subscription.deleted":
+			err, errType := customerSubscriptionDeleted(event)
+			if err != nil {
+				c.JSON(errType, gin.H{"error": err.Error()})
+			}
+			return
+		default:
+			log.Printf("Unhandled event type: %s\n", event.Type)
+		}
+
+		c.Status(http.StatusOK)
 	}
 }
