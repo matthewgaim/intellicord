@@ -107,7 +107,7 @@ func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAtt
 		SELECT content, title, embedding <-> $1 AS distance 
 		FROM chunks 
 		WHERE message_id = $2
-		AND (embedding <-> $1) >= 0.5
+		AND (embedding <-> $1) <= 0.5
 		ORDER BY distance 
 		LIMIT $3`, pgvector.NewVector(queryVector), rootMsgID, numOfAttachments+1)
 	if err != nil {
