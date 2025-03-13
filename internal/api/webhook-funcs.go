@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/stripe/stripe-go/v81"
@@ -41,10 +42,21 @@ func invoicePaymentSucceeded(event stripe.Event) (error, int) {
 	if err != nil {
 		return errors.New("Product not found from given subscription"), http.StatusInternalServerError
 	}
+
+	subStartTimestamp := sub.CurrentPeriodStart
+	subRenewalTimestamp := sub.CurrentPeriodEnd
+
+	subStartDate := time.Unix(subStartTimestamp, 0)
+	subRenewalDate := time.Unix(subRenewalTimestamp, 0)
+
+	subStartStr := subStartDate.String()
+	subRenewalStr := subRenewalDate.String()
+	log.Printf("Subscription %s:\nStart Date: %s\nRenew Date %s\n", subscriptionID, subStartStr, subRenewalStr)
+
 	planName := product.Name
 
 	// Update the user's subscription in the database
-	err = db.UpdateUsersPaidPlanStatus(discordID, priceID, planName)
+	err = db.UpdateUsersPaidPlanStatus(discordID, priceID, planName, subStartDate, subRenewalDate)
 	if err != nil {
 		return errors.New("Failed to update user plan status"), http.StatusInternalServerError
 	}
@@ -63,7 +75,9 @@ func customerSubscriptionDeleted(event stripe.Event) (error, int) {
 	}
 
 	// Remove user's paid plan status from the database
-	err := db.UpdateUsersPaidPlanStatus(discordID, "", "free")
+	now := time.Now()
+	renewalDate := now.AddDate(0, 1, 0)
+	err := db.UpdateUsersPaidPlanStatus(discordID, "", "free", now, renewalDate)
 	if err != nil {
 		return errors.New("Failed to remove user plan status from database"), http.StatusInternalServerError
 	}

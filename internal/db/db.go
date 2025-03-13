@@ -39,9 +39,20 @@ func RemoveGuildFromDB(guildID string) {
 }
 
 func AddUserToDB(userID string) {
+	now := time.Now()
+	renewalDate := now.AddDate(0, 1, 0) // 1 month from now
+
 	_, err := ai.DbPool.Exec(context.Background(), `
-		INSERT INTO users (discord_id, plan) VALUES ($1, 'free') ON CONFLICT DO NOTHING
-	`, userID)
+        INSERT INTO users (
+            discord_id, 
+            plan, 
+            plan_monthly_start_date, 
+            plan_renewal_date
+        ) VALUES (
+            $1, 'free', $2, $3
+        ) ON CONFLICT DO NOTHING
+    `, userID, now, renewalDate)
+
 	if err != nil {
 		log.Printf("Error adding user to DB: %v", err)
 	}
@@ -240,13 +251,13 @@ func GetAllowedChannels(serverID string) ([]string, error) {
 	return allowedChannels, nil
 }
 
-func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string) error {
+func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time) error {
 	log.Println(userID, priceID, planName)
 	_, err := ai.DbPool.Exec(context.Background(), `
 		UPDATE users
-		SET price_id = $1, plan = $2
-		WHERE discord_id = $3`,
-		priceID, planName, userID)
+		SET price_id = $1, plan = $2, plan_monthly_start_date = $3, plan_renewal_date = $4 
+		WHERE discord_id = $5`,
+		priceID, planName, subStartDate, subRenewalDate, userID)
 	if err != nil {
 		return err
 	} else {
@@ -254,22 +265,141 @@ func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string) e
 	}
 }
 
-type UserInfo struct {
-	PriceID  string    `json:"price_id"`
-	Plan     string    `json:"plan"`
-	JoinedAt time.Time `json:"joined_at"`
-}
-
-func GetUserInfo(discordID string) (UserInfo, error) {
+func GetUserInfoFromUserID(discordID string) (UserInfo, error) {
 	row := ai.DbPool.QueryRow(context.Background(), `
-		SELECT price_id, plan, joined_at FROM users WHERE discord_id = $1
-	`, discordID)
-	var price_id string
-	var plan string
-	var joined_at time.Time
+        SELECT price_id, plan, plan_monthly_start_date, plan_renewal_date, joined_at 
+        FROM users 
+        WHERE discord_id = $1
+    `, discordID)
 
-	if err := row.Scan(&price_id, &plan, &joined_at); err != nil {
+	var priceID string
+	var plan string
+	var planMonthlyStartDate time.Time
+	var planRenewalDate time.Time
+	var joinedAt time.Time
+
+	if err := row.Scan(&priceID, &plan, &planMonthlyStartDate, &planRenewalDate, &joinedAt); err != nil {
 		return UserInfo{}, err
 	}
-	return UserInfo{PriceID: price_id, Plan: plan, JoinedAt: joined_at}, nil
+
+	return UserInfo{
+		PriceID:              priceID,
+		Plan:                 plan,
+		PlanMonthlyStartDate: planMonthlyStartDate,
+		PlanRenewalDate:      planRenewalDate,
+		JoinedAt:             joinedAt,
+	}, nil
+}
+
+func GetGuildOwnerInfoFromGuildID(serverID string) (UserInfo, error) {
+	row := ai.DbPool.QueryRow(context.Background(), `
+		SELECT u.price_id, u.plan, u.plan_monthly_start_date, u.plan_renewal_date, u.joined_at, 
+		FROM users u
+		JOIN joined_servers js ON u.discord_id = js.owner_id
+		WHERE js.discord_server_id = $1
+	`, serverID)
+	var price_id string
+	var plan string
+	var plan_monthly_start_date time.Time
+	var plan_renewal_date time.Time
+	var joined_at time.Time
+	if err := row.Scan(&price_id, &plan, &joined_at, &plan_monthly_start_date, &plan_renewal_date); err != nil {
+		return UserInfo{}, err
+	}
+	return UserInfo{
+		PriceID:              price_id,
+		Plan:                 plan,
+		JoinedAt:             joined_at,
+		PlanMonthlyStartDate: plan_monthly_start_date,
+		PlanRenewalDate:      plan_renewal_date,
+	}, nil
+}
+
+// Map of plan names to their limits
+var planLimitsMap = map[string]PlanLimits{
+	"free": {
+		MaxFileUploads: 10,
+		MaxMessages:    100,
+	},
+	"Intellicord Basic": {
+		MaxFileUploads: 50,
+		MaxMessages:    500,
+	},
+	"Intellicord Premium": {
+		MaxFileUploads: 500,
+		MaxMessages:    5000,
+	},
+}
+
+func CheckOwnerLimits(ownerID string) (bool, bool, error) {
+	userInfo, err := GetUserInfoFromUserID(ownerID)
+	if err != nil {
+		log.Printf("Error getting user info: %v", err)
+		return false, false, err
+	}
+
+	if userInfo.Plan == "free" {
+		// If current time is past the renewal date, update the monthly start date
+		if time.Now().After(userInfo.PlanRenewalDate) {
+			newStartDate := time.Now()
+			newRenewalDate := newStartDate.AddDate(0, 1, 0)
+
+			_, err := ai.DbPool.Exec(context.Background(), `
+                UPDATE users 
+                SET plan_monthly_start_date = $1, plan_renewal_date = $2 
+                WHERE discord_id = $3
+            `, newStartDate, newRenewalDate, ownerID)
+
+			if err != nil {
+				log.Printf("Error updating free user's billing period: %v", err)
+				return false, false, err
+			}
+
+			userInfo.PlanMonthlyStartDate = newStartDate
+			userInfo.PlanRenewalDate = newRenewalDate
+		}
+	}
+
+	planLimits, ok := planLimitsMap[userInfo.Plan]
+	if !ok {
+		planLimits = planLimitsMap["free"]
+	}
+
+	monthlyStartDate := userInfo.PlanMonthlyStartDate
+
+	// Count total file uploads within the current billing period
+	var totalFileUploads int
+	err = ai.DbPool.QueryRow(context.Background(), `
+        SELECT COUNT(uf.id) 
+        FROM uploaded_files uf
+        JOIN joined_servers js ON uf.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1 AND uf.uploaded_at >= $2
+    `, ownerID, monthlyStartDate).Scan(&totalFileUploads)
+
+	if err != nil {
+		log.Printf("Error counting file uploads: %v", err)
+		return false, false, err
+	}
+
+	// Count total messages within the current billing period
+	var totalMessages int
+	err = ai.DbPool.QueryRow(context.Background(), `
+        SELECT COUNT(ml.id) 
+        FROM message_logs ml
+        JOIN joined_servers js ON ml.discord_server_id = js.discord_server_id
+        WHERE js.owner_id = $1 AND ml.created_at >= $2
+    `, ownerID, monthlyStartDate).Scan(&totalMessages)
+
+	if err != nil {
+		log.Printf("Error counting messages: %v", err)
+		return false, false, err
+	}
+	log.Printf("File Uploads: %d/%d", totalFileUploads, planLimits.MaxFileUploads)
+	log.Printf("Messages: %d/%d", totalMessages, planLimits.MaxMessages)
+
+	// Check if limits are reached
+	fileUploadLimitReached := totalFileUploads >= planLimits.MaxFileUploads
+	messageLimitReached := totalMessages >= planLimits.MaxMessages
+
+	return fileUploadLimitReached, messageLimitReached, nil
 }

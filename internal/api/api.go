@@ -110,7 +110,7 @@ func getUserInfo() gin.HandlerFunc {
 			return
 		}
 
-		user_info, err := db.GetUserInfo(user_id)
+		user_info, err := db.GetUserInfoFromUserID(user_id)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Error getting user info"})
 			return

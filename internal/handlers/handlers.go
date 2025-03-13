@@ -74,6 +74,20 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				return
 			}
 
+			guild, err := s.Guild(m.GuildID)
+			if err != nil {
+				log.Println("Error getting guild")
+				return
+			}
+			_, messageLimitReached, err := db.CheckOwnerLimits(guild.OwnerID)
+			if err != nil {
+				log.Printf("Error getting owners limits: %v", err)
+			}
+			if messageLimitReached {
+				s.ChannelMessageSend(channel.ID, "Maximum message limit reached. Upgrade for more messages")
+				return
+			}
+
 			s.ChannelTyping(channel.ID)
 
 			// Don't recognize extra files in a thread
@@ -95,7 +109,7 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				if err != nil {
 					log.Printf("Error getting root message: %v", err)
 				}
-				db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
+				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 				numOfAttachments := len(rootMsg.Attachments)
 				rootMsgID := rootMsg.ID
 				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)
@@ -136,6 +150,21 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			log.Println("Documents wont be recognized in an existing thread")
 			return
 		}
+
+		guild, err := s.Guild(m.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+		_, messageLimitReached, err := db.CheckOwnerLimits(guild.OwnerID)
+		if err != nil {
+			log.Printf("Error getting owners limits: %v", err)
+		}
+		if messageLimitReached {
+			s.ChannelMessageSend(channel.ID, "Maximum message limit reached. Upgrade for more messages")
+			return
+		}
+
 		data := &discordgo.ThreadStart{
 			Name: m.Attachments[0].Filename,
 		}
