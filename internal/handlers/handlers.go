@@ -26,7 +26,7 @@ func BotReadyRegisterCommandsHandler(dg *discordgo.Session) func(s *discordgo.Se
 	return func(s *discordgo.Session, r *discordgo.Ready) {
 		for _, g := range r.Guilds {
 			log.Printf("Registering commands for existing server: %s\n", g.ID)
-			guilds.RegisterCommandsForGuild(dg, g.ID, commands)
+			go guilds.RegisterCommandsForGuild(dg, g.ID, commands)
 		}
 		dg.UpdateCustomStatus("Upload a file, or type /ask to use Intellicord")
 	}
@@ -103,15 +103,14 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				return
 			}
 			if channel.OwnerID == s.State.User.ID {
-				log.Println("Message received in bot-created thread:", m.Content)
-
 				rootMsg, err := getRootMessageOfThread(s, channel)
 				if err != nil {
 					log.Printf("Error getting root message: %v", err)
 				}
-				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 				numOfAttachments := len(rootMsg.Attachments)
 				rootMsgID := rootMsg.ID
+
+				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)
 				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
 				response := ai.LlmGenerateText(history, m.Content)
