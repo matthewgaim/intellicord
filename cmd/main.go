@@ -65,6 +65,8 @@ func main() {
 	if err = dg.Open(); err != nil {
 		log.Fatalf("Error opening connection: %v", err)
 	}
+	defer dg.Close()
+
 	fmt.Println("Waiting for bot initialization...")
 	if dg.State.User == nil {
 		log.Fatal("Bot user is not initialized")
@@ -77,7 +79,6 @@ func main() {
 	log.Println("Press Ctrl+C to exit")
 	<-stop
 
-	defer dg.Close()
 	for _, g := range dg.State.Guilds {
 		guilds.DeleteCommandsForGuild(dg, g.ID)
 	}
