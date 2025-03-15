@@ -15,17 +15,19 @@ import (
 	"github.com/matthewgaim/intellicord/internal/handlers"
 )
 
-var dg *discordgo.Session
-
 func main() {
 	var err error = nil
 	err = godotenv.Load(".env")
 	if err != nil {
 		log.Println("Error loading .env file")
 	}
-	DISCORD_TOKEN := os.Getenv("DISCORD_TOKEN")
 
-	dg, err = discordgo.New("Bot " + DISCORD_TOKEN)
+	DISCORD_TOKEN := os.Getenv("DISCORD_TOKEN")
+	if DISCORD_TOKEN == "" {
+		log.Fatal("DISCORD_TOKEN is missing in the environment variables")
+	}
+
+	dg, err := discordgo.New("Bot " + DISCORD_TOKEN)
 	if err != nil {
 		log.Fatalf("Error creating Discord session: %v", err)
 	}

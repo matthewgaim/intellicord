@@ -34,24 +34,6 @@ func InitAI() {
 	if err != nil {
 		log.Fatal("Unable to connect to database:", err)
 	}
-
-	_, err = DbPool.Exec(context.Background(), "CREATE EXTENSION IF NOT EXISTS vector")
-	if err != nil {
-		log.Fatal("Error enabling pgvector:", err)
-	}
-
-	_, err = DbPool.Exec(context.Background(), `
-	CREATE TABLE IF NOT EXISTS chunks (
-		id SERIAL PRIMARY KEY,
-		message_id TEXT,
-		title TEXT,
-		doc_url TEXT,
-		content TEXT,
-		embedding vector(1536) -- OpenAI embeddings are 1536-dimensional
-	);`)
-	if err != nil {
-		log.Fatal("Error creating chunks table:", err)
-	}
 }
 
 func ChunkAndVectorize(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
