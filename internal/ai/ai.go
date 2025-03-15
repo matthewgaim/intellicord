@@ -2,14 +2,12 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/openai/openai-go"
@@ -57,7 +55,7 @@ func InitAI() {
 }
 
 func ChunkAndVectorize(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
-	_, err := DbPool.Exec(context.Background(), `
+	_, err := DbPool.Exec(ctx, `
 	INSERT INTO uploaded_files (
 		discord_server_id,
 		channel_id,
@@ -71,16 +69,43 @@ func ChunkAndVectorize(ctx context.Context, message_id string, content string, t
 		log.Printf("Error uploading to uploaded_files: %v", err)
 		return
 	}
-	chunks := chunkText(content)
-	for _, chunk := range chunks {
-		embedding, err := getEmbedding(chunk)
-		if err != nil {
-			log.Fatalf("Error generating embedding for chunk: %v", err)
-		}
 
-		_, err = DbPool.Exec(ctx, "INSERT INTO chunks (message_id, title, doc_url, content, embedding, discord_server_id) VALUES ($1, $2, $3, $4, $5, $6)", message_id, title, doc_url, chunk, pgvector.NewVector(embedding), discord_server_id)
-		if err != nil {
-			log.Fatalf("Failed to add chunk for '%v': %v", title, err)
+	chunks := chunkText(content)
+	embedChan := make(chan EmbedChannelObject, len(chunks))
+	errChan := make(chan error, len(chunks))
+	var wg sync.WaitGroup
+
+	for _, chunk := range chunks {
+		wg.Add(1)
+		go newEmbedding(chunk, embedChan, errChan, &wg)
+	}
+
+	go func() {
+		wg.Wait()
+		close(embedChan)
+		close(errChan)
+	}()
+
+	for embedChan != nil || errChan != nil {
+		select {
+		case embedding, ok := <-embedChan:
+			if !ok {
+				embedChan = nil
+				continue
+			}
+			_, err := DbPool.Exec(ctx,
+				"INSERT INTO chunks (message_id, title, doc_url, content, embedding, discord_server_id) VALUES ($1, $2, $3, $4, $5, $6)",
+				message_id, title, doc_url, embedding.Chunk, pgvector.NewVector(embedding.Vector), discord_server_id)
+			if err != nil {
+				log.Printf("Error inserting chunk: %v", err)
+			}
+
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			log.Printf("Embedding error: %v", err)
 		}
 	}
 }
@@ -95,18 +120,47 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 		panic(err.Error())
 	}
 	response := chatCompletion.Choices[0].Message.Content
-	log.Printf("New AI Message: %v\n", response)
 	return response
 }
 
 func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAttachments int) string {
-	queryVector, err := getEmbedding(query)
-	if err != nil {
-		log.Println("Error generating query embedding:", err)
-		return ""
+	var embedChan = make(chan EmbedChannelObject)
+	var errChan = make(chan error)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go newEmbedding(query, embedChan, errChan, &wg)
+
+	go func() {
+		wg.Wait()
+		close(embedChan)
+		close(errChan)
+	}()
+	var queryVector []float32
+	for {
+		select {
+		case embedding, ok := <-embedChan:
+			if !ok {
+				embedChan = nil
+			} else {
+				queryVector = embedding.Vector
+			}
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+			} else {
+				log.Printf("Embedding error: %v", err)
+				return ""
+			}
+		}
+
+		if embedChan == nil && errChan == nil {
+			break
+		}
 	}
+
 	rows, err := DbPool.Query(ctx, `
-		SELECT content, title, embedding <-> $1 AS distance 
+		SELECT id, content, title, embedding <-> $1 AS distance 
 		FROM chunks 
 		WHERE message_id = $2
 		ORDER BY distance 
@@ -121,57 +175,42 @@ func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAtt
 		var content string
 		var title string
 		var distance float32
-		err := rows.Scan(&content, &title, &distance)
+		var id int
+		err := rows.Scan(&id, &content, &title, &distance)
 		if err != nil {
 			log.Println("Error scanning row:", err)
 			return ""
 		}
 		content = fmt.Sprintf("%s: %s", title, content)
 		context = append(context, content)
-		fmt.Printf("Relevant chunk found. Distance: %f\n", distance)
+		fmt.Printf("Relevant chunk (#%d) Distance: %f\n", id, distance)
 	}
 	result := strings.Join(context, "\n")
 	return result
 }
 
-func getEmbedding(text string) ([]float32, error) {
-	url := "https://api.openai.com/v1/embeddings"
-	payload := strings.NewReader(fmt.Sprintf(`{"input": %q, "model": "text-embedding-ada-002"}`, text))
+type EmbedChannelObject struct {
+	Chunk  string
+	Vector []float32
+}
 
-	req, err := http.NewRequest("POST", url, payload)
+func newEmbedding(text string, embedChannel chan EmbedChannelObject, errChannel chan error, wg *sync.WaitGroup) {
+	defer wg.Done()
+	res, err := oai.Embeddings.New(context.Background(), openai.EmbeddingNewParams{
+		Input: openai.F(openai.EmbeddingNewParamsInputUnion(openai.EmbeddingNewParamsInputArrayOfStrings{text})),
+		Model: openai.F("text-embedding-3-small"),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		log.Printf("Error embedding text: %v", err)
+		errChannel <- err
+	} else {
+		// float64 to 32 conversion for pgvector
+		var embedding32 []float32
+		for _, ve := range res.Data[0].Embedding {
+			embedding32 = append(embedding32, float32(ve))
+		}
+		embedChannel <- EmbedChannelObject{Chunk: text, Vector: embedding32}
 	}
-	req.Header.Set("Authorization", "Bearer "+OpenAIAPIKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("OpenAI API error: %s", string(body))
-	}
-
-	var result struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if len(result.Data) == 0 {
-		return nil, fmt.Errorf("no embeddings returned")
-	}
-
-	return result.Data[0].Embedding, nil
 }
 
 func chunkText(text string) []string {
