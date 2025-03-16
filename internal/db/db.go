@@ -251,13 +251,13 @@ func GetAllowedChannels(serverID string) ([]string, error) {
 	return allowedChannels, nil
 }
 
-func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time) error {
+func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time, customerID string) error {
 	log.Println(userID, priceID, planName)
 	_, err := ai.DbPool.Exec(context.Background(), `
 		UPDATE users
-		SET price_id = $1, plan = $2, plan_monthly_start_date = $3, plan_renewal_date = $4 
-		WHERE discord_id = $5`,
-		priceID, planName, subStartDate, subRenewalDate, userID)
+		SET price_id = $1, plan = $2, plan_monthly_start_date = $3, plan_renewal_date = $4, stripe_customer_id = $5
+		WHERE discord_id = $6`,
+		priceID, planName, subStartDate, subRenewalDate, customerID, userID)
 	if err != nil {
 		return err
 	} else {

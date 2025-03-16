@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -8,9 +9,11 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/matthewgaim/intellicord/internal/ai"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/matthewgaim/intellicord/internal/handlers"
 	"github.com/stripe/stripe-go/v81"
+	billingPortalSession "github.com/stripe/stripe-go/v81/billingportal/session"
 	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/stripe/stripe-go/v81/webhook"
 )
@@ -80,6 +83,7 @@ func StartAPIServer() {
 		protectedRoutes.GET("/get-allowed-channels", getAllowedChannels())
 		protectedRoutes.POST("/create-checkout-session", createCheckoutSession())
 		protectedRoutes.GET("/session-status", retrieveCheckoutSession())
+		protectedRoutes.GET("/get-stripe-portal", createPortalSession())
 	}
 	router.POST("/webhook", handleStripeWebhook())
 
@@ -262,6 +266,45 @@ func retrieveCheckoutSession() gin.HandlerFunc {
 	}
 }
 
+func createPortalSession() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		discord_id := c.Query("discord_id")
+		if discord_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing discord ID"})
+			return
+		}
+		row := ai.DbPool.QueryRow(context.Background(),
+			`SELECT stripe_customer_id FROM users WHERE discord_id = $1`, discord_id)
+		var stripe_customer_id string
+		if err := row.Scan(&stripe_customer_id); err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting customer ID"})
+			return
+		}
+		if stripe_customer_id == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "This user is not subscribed yet"})
+			return
+		}
+
+		domain := os.Getenv("INTELLICORD_FRONTEND_URL")
+		returnURL := fmt.Sprintf("%s/dashboard/profile", domain)
+		params := &stripe.BillingPortalSessionParams{
+			Customer:  stripe.String(stripe_customer_id),
+			ReturnURL: stripe.String(returnURL),
+		}
+
+		// Create the portal session
+		s, err := billingPortalSession.New(params)
+		if err != nil {
+			log.Printf("session.New: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"url": s.URL})
+	}
+}
+
 func handleStripeWebhook() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		const MaxBodyBytes = int64(65536)
@@ -293,6 +336,12 @@ func handleStripeWebhook() gin.HandlerFunc {
 			return
 		case "customer.subscription.deleted":
 			err, errType := customerSubscriptionDeleted(event)
+			if err != nil {
+				c.JSON(errType, gin.H{"error": err.Error()})
+			}
+			return
+		case "customer.subscription.updated":
+			err, errType := customerSubscriptionUpdated(event)
 			if err != nil {
 				c.JSON(errType, gin.H{"error": err.Error()})
 			}

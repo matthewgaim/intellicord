@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     discord_id TEXT UNIQUE NOT NULL,
     price_id VARCHAR(255) NOT NULL DEFAULT '',
     plan VARCHAR(255) NOT NULL DEFAULT 'free',
+    stripe_customer_id VARCHAR(255) NOT NULL DEFAULT '',
     plan_monthly_start_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- to reference as month start
     plan_renewal_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
