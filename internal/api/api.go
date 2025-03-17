@@ -18,17 +18,6 @@ import (
 	"github.com/stripe/stripe-go/v81/webhook"
 )
 
-type User struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-}
-
-type UpdateAllowedChannelsRequest struct {
-	ChannelIDs []string `json:"channel_ids"`
-	ServerID   string   `json:"server_id"`
-	UserID     string   `json:"user_id"`
-}
-
 func VerifyDiscordToken(bearerToken string) (bool, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me", nil)
@@ -230,9 +219,7 @@ func createCheckoutSession() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		type ClientSecret struct {
-			ClientSecret string `json:"clientSecret"`
-		}
+
 		c.JSON(http.StatusOK, ClientSecret{
 			ClientSecret: s.ClientSecret,
 		})
@@ -253,11 +240,6 @@ func retrieveCheckoutSession() gin.HandlerFunc {
 			return
 		}
 
-		type CheckoutSessionType struct {
-			Status string `json:"status"`
-			Name   string `json:"name"`
-			Email  string `json:"email"`
-		}
 		c.JSON(http.StatusOK, CheckoutSessionType{
 			Status: string(s.Status),
 			Name:   string(s.CustomerDetails.Name),
