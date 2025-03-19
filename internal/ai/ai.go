@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/openai/openai-go"
 	"github.com/pgvector/pgvector-go"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 var oai *openai.Client
 var DbPool *pgxpool.Pool
 var OpenAIAPIKey string
+var RedisClient *redis.Client
 
 func InitAI() {
 	var err error
@@ -29,11 +31,19 @@ func InitAI() {
 	oai = openai.NewClient()
 	DATABASE_URL := os.Getenv("DATABASE_URL")
 	OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
+	REDIS_URL := os.Getenv("REDIS_URL")
 
 	DbPool, err = pgxpool.New(context.Background(), DATABASE_URL)
 	if err != nil {
 		log.Fatal("Unable to connect to database:", err)
 	}
+
+	opts, err := redis.ParseURL(REDIS_URL)
+	if err != nil {
+		log.Fatal("Unable to connect to redis:", err)
+	}
+
+	RedisClient = redis.NewClient(opts)
 }
 
 func ChunkAndVectorize(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
