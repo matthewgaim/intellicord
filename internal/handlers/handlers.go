@@ -177,15 +177,15 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			attachmentLink := attachment.URL
 			filename := attachment.Filename
 			log.Printf("Attachment %d: %s (%s)", i, filename, attachmentLink)
-
+			processingMessage, err := s.ChannelMessageSend(thread.ID, fmt.Sprintf("-# 🔎 Reading file: %s", filename))
 			fileText, fileSize, err := getFileTextAndSize(attachmentLink)
 			if err != nil {
 				err_str := err.Error()
 				if err_str == "Unsupported file type" {
-					s.ChannelMessageSend(thread.ID, fmt.Sprintf("-# 🚨 File '%s' is an unsupported file type. It wont be analyzed.", filename))
+					s.ChannelMessageEdit(thread.ID, processingMessage.ID, fmt.Sprintf("-# 🚨 File '%s' is an unsupported file type. It wont be analyzed.", filename))
 					continue
 				} else if err_str == "File too large" {
-					s.ChannelMessageSend(thread.ID, fmt.Sprintf("-# 🚨 File '%s' is too big.", filename))
+					s.ChannelMessageEdit(thread.ID, processingMessage.ID, fmt.Sprintf("-# 🚨 File '%s' is too big.", filename))
 					continue
 				} else {
 					log.Printf("Error getting file text: %v", err)
@@ -194,7 +194,7 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			}
 			discord_server_id := m.GuildID
 			ai.ChunkAndVectorize(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id, fileSize, thread.ID, m.Author.ID)
-			_, err = s.ChannelMessageSend(thread.ID, fmt.Sprintf("-# ✅ File '%s' is ready for analyzing", filename))
+			_, err = s.ChannelMessageEdit(thread.ID, processingMessage.ID, fmt.Sprintf("-# ✅ File '%s' is ready!", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
 			}
@@ -204,6 +204,7 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 
 func AttachmentDeletedHandler() func(s *discordgo.Session, m *discordgo.MessageDelete) {
 	return func(s *discordgo.Session, m *discordgo.MessageDelete) {
+		// cant check for attachments since message is deleted
 		message_id := m.Message.ID
 		ai.DeleteEmbeddings(context.Background(), message_id)
 	}
