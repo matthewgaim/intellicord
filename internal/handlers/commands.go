@@ -24,6 +24,7 @@ var (
 					Name:        "question",
 					Description: "Your question",
 					Required:    true,
+					MaxLength:   100,
 				},
 			},
 		},
