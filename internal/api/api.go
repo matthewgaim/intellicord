@@ -9,7 +9,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/matthewgaim/intellicord/internal/ai"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/matthewgaim/intellicord/internal/handlers"
 	"github.com/stripe/stripe-go/v81"
@@ -255,7 +254,7 @@ func createPortalSession() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing discord ID"})
 			return
 		}
-		row := ai.DbPool.QueryRow(context.Background(),
+		row := db.DbPool.QueryRow(context.Background(),
 			`SELECT stripe_customer_id FROM users WHERE discord_id = $1`, discord_id)
 		var stripe_customer_id string
 		if err := row.Scan(&stripe_customer_id); err != nil {

@@ -9,10 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/openai/openai-go"
 	"github.com/pgvector/pgvector-go"
-	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -21,33 +20,15 @@ const (
 )
 
 var oai *openai.Client
-var DbPool *pgxpool.Pool
 var OpenAIAPIKey string
-var RedisClient *redis.Client
 
 func InitAI() {
-	var err error
-
-	oai = openai.NewClient()
-	DATABASE_URL := os.Getenv("DATABASE_URL")
 	OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
-	REDIS_URL := os.Getenv("REDIS_URL")
-
-	DbPool, err = pgxpool.New(context.Background(), DATABASE_URL)
-	if err != nil {
-		log.Fatal("Unable to connect to database:", err)
-	}
-
-	opts, err := redis.ParseURL(REDIS_URL)
-	if err != nil {
-		log.Fatal("Unable to connect to redis:", err)
-	}
-
-	RedisClient = redis.NewClient(opts)
+	oai = openai.NewClient()
 }
 
 func ChunkAndVectorize(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
-	_, err := DbPool.Exec(ctx, `
+	_, err := db.DbPool.Exec(ctx, `
 	INSERT INTO uploaded_files (
 		discord_server_id,
 		channel_id,
@@ -85,7 +66,7 @@ func ChunkAndVectorize(ctx context.Context, message_id string, content string, t
 				embedChan = nil
 				continue
 			}
-			_, err := DbPool.Exec(ctx,
+			_, err := db.DbPool.Exec(ctx,
 				"INSERT INTO chunks (message_id, title, doc_url, content, embedding, discord_server_id) VALUES ($1, $2, $3, $4, $5, $6)",
 				message_id, title, doc_url, embedding.Chunk, pgvector.NewVector(embedding.Vector), discord_server_id)
 			if err != nil {
@@ -151,7 +132,7 @@ func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAtt
 		}
 	}
 
-	rows, err := DbPool.Query(ctx, `
+	rows, err := db.DbPool.Query(ctx, `
 		SELECT id, content, title, embedding <-> $1 AS distance 
 		FROM chunks 
 		WHERE message_id = $2
@@ -229,6 +210,6 @@ func chunkText(text string) []string {
 }
 
 func DeleteEmbeddings(ctx context.Context, message_id string) {
-	DbPool.Exec(ctx, "DELETE FROM chunks WHERE message_id = $1", message_id)
+	db.DbPool.Exec(ctx, "DELETE FROM chunks WHERE message_id = $1", message_id)
 	log.Printf("Deleted chunks from message: %s", message_id)
 }

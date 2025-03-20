@@ -12,12 +12,33 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/matthewgaim/intellicord/internal/ai"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
+var DbPool *pgxpool.Pool
+var RedisClient *redis.Client
+
+func InitDB() {
+	DATABASE_URL := os.Getenv("DATABASE_URL")
+	REDIS_URL := os.Getenv("REDIS_URL")
+
+	var err error
+	DbPool, err = pgxpool.New(context.Background(), DATABASE_URL)
+	if err != nil {
+		log.Fatal("Unable to connect to database:", err)
+	}
+
+	opts, err := redis.ParseURL(REDIS_URL)
+	if err != nil {
+		log.Fatal("Unable to connect to redis:", err)
+	}
+
+	RedisClient = redis.NewClient(opts)
+}
+
 func AddGuildToDB(guildID string, guildOwnerID string) {
-	_, err := ai.DbPool.Exec(context.Background(), `
+	_, err := DbPool.Exec(context.Background(), `
 		INSERT INTO joined_servers (discord_server_id, owner_id) VALUES ($1, $2) ON CONFLICT DO NOTHING
 	`, guildID, guildOwnerID)
 	if err != nil {
@@ -26,13 +47,13 @@ func AddGuildToDB(guildID string, guildOwnerID string) {
 }
 
 func RemoveGuildFromDB(guildID string) {
-	_, err := ai.DbPool.Exec(context.Background(), `
+	_, err := DbPool.Exec(context.Background(), `
 	DELETE FROM joined_servers WHERE discord_server_id = $1`, guildID)
 	if err != nil {
 		log.Printf("Error removing guild from DB: %v", err)
 	}
 
-	_, err = ai.DbPool.Exec(context.Background(), `
+	_, err = DbPool.Exec(context.Background(), `
 	DELETE FROM chunks WHERE discord_server_id = $1`, guildID)
 	if err != nil {
 		log.Printf("Error removing chunks from DB: %v", err)
@@ -43,7 +64,7 @@ func AddUserToDB(userID string) {
 	now := time.Now()
 	renewalDate := now.AddDate(0, 1, 0) // 1 month from now
 
-	_, err := ai.DbPool.Exec(context.Background(), `
+	_, err := DbPool.Exec(context.Background(), `
         INSERT INTO users (
             discord_id, 
             plan, 
@@ -60,7 +81,7 @@ func AddUserToDB(userID string) {
 }
 
 func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
-	rows, err := ai.DbPool.Query(context.Background(), `
+	rows, err := DbPool.Query(context.Background(), `
     SELECT id, discord_server_id, joined_at FROM joined_servers WHERE owner_id = $1
     `, userID)
 	if err != nil {
@@ -106,7 +127,7 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 }
 
 func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, int, error) {
-	rows, err := ai.DbPool.Query(context.Background(), `
+	rows, err := DbPool.Query(context.Background(), `
         SELECT DATE(uf.uploaded_at) AS upload_date, COUNT(uf.id) AS total_files, uf.title, uf.file_size
         FROM uploaded_files uf
         JOIN joined_servers js ON uf.discord_server_id = js.discord_server_id
@@ -167,7 +188,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 
 	// total messages across all owned servers
 	var totalMessages int
-	err = ai.DbPool.QueryRow(context.Background(), `
+	err = DbPool.QueryRow(context.Background(), `
         SELECT COUNT(ml.id) 
         FROM message_logs ml
         JOIN joined_servers js ON ml.discord_server_id = js.discord_server_id
@@ -215,7 +236,7 @@ func GetServerInfo(discord_server_id string, BOT_TOKEN string) (discordgo.Guild,
 }
 
 func AddMessageLog(message_id string, discord_server_id string, channel_id string, user_id string) {
-	_, err := ai.DbPool.Exec(context.Background(), `
+	_, err := DbPool.Exec(context.Background(), `
 	INSERT INTO message_logs 
 		(message_id, discord_server_id, channel_id, user_id)
 	VALUES
@@ -234,7 +255,7 @@ func UpdateAllowedChannels(allowedChannels []string, serverID string) error {
 		RETURNING allowed_channels
 	`
 
-	_, err := ai.DbPool.Exec(context.Background(), query, allowedChannels, serverID)
+	_, err := DbPool.Exec(context.Background(), query, allowedChannels, serverID)
 	if err != nil {
 		return err
 	}
@@ -244,7 +265,7 @@ func UpdateAllowedChannels(allowedChannels []string, serverID string) error {
 func GetAllowedChannels(serverID string) ([]string, error) {
 	var allowedChannels []string
 	query := `SELECT allowed_channels FROM joined_servers WHERE discord_server_id = $1`
-	err := ai.DbPool.QueryRow(context.Background(), query, serverID).Scan(&allowedChannels)
+	err := DbPool.QueryRow(context.Background(), query, serverID).Scan(&allowedChannels)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +274,7 @@ func GetAllowedChannels(serverID string) ([]string, error) {
 }
 
 func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time, customerID string) error {
-	_, err := ai.DbPool.Exec(context.Background(), `
+	_, err := DbPool.Exec(context.Background(), `
 		UPDATE users
 		SET price_id = $1, plan = $2, plan_monthly_start_date = $3, plan_renewal_date = $4, stripe_customer_id = $5
 		WHERE discord_id = $6`,
@@ -273,7 +294,7 @@ func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, s
 }
 
 func GetUserInfoFromUserID(discordID string) (UserInfo, error) {
-	row := ai.DbPool.QueryRow(context.Background(), `
+	row := DbPool.QueryRow(context.Background(), `
         SELECT price_id, plan, plan_monthly_start_date, plan_renewal_date, joined_at 
         FROM users 
         WHERE discord_id = $1
@@ -315,7 +336,7 @@ var planLimitsMap = map[string]PlanLimits{
 }
 
 func CheckOwnerLimits(ownerID string) (bool, bool, error) {
-	cached, redis_err := ai.RedisClient.Get(context.Background(), ownerID).Result()
+	cached, redis_err := RedisClient.Get(context.Background(), ownerID).Result()
 	cachedByteArr := []byte(cached)
 	var userInfo UserInfo
 
@@ -340,7 +361,7 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 			newStartDate := time.Now()
 			newRenewalDate := newStartDate.AddDate(0, 1, 0)
 
-			_, err := ai.DbPool.Exec(context.Background(), `
+			_, err := DbPool.Exec(context.Background(), `
                 UPDATE users 
                 SET plan_monthly_start_date = $1, plan_renewal_date = $2 
                 WHERE discord_id = $3
@@ -365,7 +386,7 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 
 	// Count total file uploads within the current billing period
 	var totalFileUploads int
-	err = ai.DbPool.QueryRow(context.Background(), `
+	err = DbPool.QueryRow(context.Background(), `
         SELECT COUNT(uf.id) 
         FROM uploaded_files uf
         JOIN joined_servers js ON uf.discord_server_id = js.discord_server_id
@@ -379,7 +400,7 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 
 	// Count total messages within the current billing period
 	var totalMessages int
-	err = ai.DbPool.QueryRow(context.Background(), `
+	err = DbPool.QueryRow(context.Background(), `
         SELECT COUNT(ml.id) 
         FROM message_logs ml
         JOIN joined_servers js ON ml.discord_server_id = js.discord_server_id
@@ -406,7 +427,7 @@ func UpdateToRedis(key string, val any) error {
 		return err
 	}
 	stringUserInfo := string(marshalledVal)
-	_, err = ai.RedisClient.Set(context.Background(), key, stringUserInfo, 24*time.Hour).Result()
+	_, err = RedisClient.Set(context.Background(), key, stringUserInfo, 24*time.Hour).Result()
 	if err != nil {
 		return err
 	}

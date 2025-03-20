@@ -11,6 +11,7 @@ import (
 
 	"github.com/matthewgaim/intellicord/internal/ai"
 	"github.com/matthewgaim/intellicord/internal/api"
+	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/matthewgaim/intellicord/internal/guilds"
 	"github.com/matthewgaim/intellicord/internal/handlers"
 )
@@ -33,6 +34,7 @@ func main() {
 	}
 
 	ai.InitAI()
+	db.InitDB()
 
 	// Command handlers
 	handlers.InitCommands()
