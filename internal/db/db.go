@@ -253,7 +253,6 @@ func GetAllowedChannels(serverID string) ([]string, error) {
 }
 
 func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time, customerID string) error {
-	log.Println(userID, priceID, planName)
 	_, err := ai.DbPool.Exec(context.Background(), `
 		UPDATE users
 		SET price_id = $1, plan = $2, plan_monthly_start_date = $3, plan_renewal_date = $4, stripe_customer_id = $5
@@ -262,6 +261,13 @@ func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, s
 	if err != nil {
 		return err
 	} else {
+		userInfo := UserInfo{
+			PriceID:              priceID,
+			Plan:                 planName,
+			PlanMonthlyStartDate: subStartDate,
+			PlanRenewalDate:      subRenewalDate,
+		}
+		UpdateToRedis(userID, userInfo)
 		return nil
 	}
 }
@@ -292,30 +298,6 @@ func GetUserInfoFromUserID(discordID string) (UserInfo, error) {
 	}, nil
 }
 
-func GetGuildOwnerInfoFromGuildID(serverID string) (UserInfo, error) {
-	row := ai.DbPool.QueryRow(context.Background(), `
-		SELECT u.price_id, u.plan, u.plan_monthly_start_date, u.plan_renewal_date, u.joined_at, 
-		FROM users u
-		JOIN joined_servers js ON u.discord_id = js.owner_id
-		WHERE js.discord_server_id = $1
-	`, serverID)
-	var price_id string
-	var plan string
-	var plan_monthly_start_date time.Time
-	var plan_renewal_date time.Time
-	var joined_at time.Time
-	if err := row.Scan(&price_id, &plan, &joined_at, &plan_monthly_start_date, &plan_renewal_date); err != nil {
-		return UserInfo{}, err
-	}
-	return UserInfo{
-		PriceID:              price_id,
-		Plan:                 plan,
-		JoinedAt:             joined_at,
-		PlanMonthlyStartDate: plan_monthly_start_date,
-		PlanRenewalDate:      plan_renewal_date,
-	}, nil
-}
-
 // Map of plan names to their limits
 var planLimitsMap = map[string]PlanLimits{
 	"free": {
@@ -336,24 +318,18 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 	cached, redis_err := ai.RedisClient.Get(context.Background(), ownerID).Result()
 	cachedByteArr := []byte(cached)
 	var userInfo UserInfo
+
 	err := json.Unmarshal(cachedByteArr, &userInfo)
-	log.Println(err)
-	if redis_err == redis.Nil || err != nil {
+	if redis_err == redis.Nil || err != nil { // just not found in cache, not a real error
 		log.Println("Owner limits not found in Redis, searching DB")
 		userInfo, err = GetUserInfoFromUserID(ownerID)
 		if err != nil {
 			log.Printf("Error getting user info: %v", err)
 			return false, false, err
 		}
-		marshalledUserInfo, err := json.Marshal(userInfo)
-		stringUserInfo := string(marshalledUserInfo)
-		result, err := ai.RedisClient.Set(context.Background(), ownerID, stringUserInfo, 24*time.Hour).Result()
+		err = UpdateToRedis(ownerID, userInfo)
 		if err != nil {
 			log.Printf("Failed to set data in Redis: %v", err)
-			return false, false, err
-		}
-		if result != "OK" {
-			log.Printf("Unexpected JSONSet result: %v", result)
 		}
 	} else {
 		log.Println("Cache hit")
@@ -422,4 +398,18 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 	messageLimitReached := totalMessages >= planLimits.MaxMessages
 
 	return fileUploadLimitReached, messageLimitReached, nil
+}
+
+func UpdateToRedis(key string, val any) error {
+	marshalledVal, err := json.Marshal(val)
+	if err != nil {
+		return err
+	}
+	stringUserInfo := string(marshalledVal)
+	_, err = ai.RedisClient.Set(context.Background(), key, stringUserInfo, 24*time.Hour).Result()
+	if err != nil {
+		return err
+	}
+	log.Printf("Updating key on Redis: %s", key)
+	return nil
 }
