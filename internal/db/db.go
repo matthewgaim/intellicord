@@ -259,17 +259,32 @@ func UpdateAllowedChannels(allowedChannels []string, serverID string) error {
 	if err != nil {
 		return err
 	}
+	redis_key := fmt.Sprintf(`server_%s_allowed_channels`, serverID)
+	err = UpdateToRedis(redis_key, allowedChannels)
+	if err != nil {
+		log.Println(err)
+	}
 	return nil
 }
 
 func GetAllowedChannels(serverID string) ([]string, error) {
+	redis_key := fmt.Sprintf(`server_%s_allowed_channels`, serverID)
+	cached, redis_err := RedisClient.Get(context.Background(), redis_key).Result()
+	cachedByteArr := []byte(cached)
 	var allowedChannels []string
-	query := `SELECT allowed_channels FROM joined_servers WHERE discord_server_id = $1`
-	err := DbPool.QueryRow(context.Background(), query, serverID).Scan(&allowedChannels)
-	if err != nil {
-		return nil, err
-	}
 
+	err := json.Unmarshal(cachedByteArr, &allowedChannels)
+	if redis_err == redis.Nil || err != nil {
+		log.Printf("Not found in cache: %s", redis_key)
+		query := `SELECT allowed_channels FROM joined_servers WHERE discord_server_id = $1`
+		err = DbPool.QueryRow(context.Background(), query, serverID).Scan(&allowedChannels)
+		if err != nil {
+			return nil, err
+		}
+		UpdateToRedis(redis_key, allowedChannels)
+	} else {
+		log.Println("Channel check cache hit")
+	}
 	return allowedChannels, nil
 }
 
