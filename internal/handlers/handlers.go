@@ -198,22 +198,21 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
 			}
-
-			// If user sent a message with the files
-			if m.Content != "" {
-				s.ChannelTyping(thread.ID)
-				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
-				numOfAttachments := len(m.Attachments)
-				res := ai.QueryVectorDB(context.Background(), m.Content, m.ID, numOfAttachments)
-				history := []openai.ChatCompletionMessageParamUnion{
-					openai.SystemMessage(fmt.Sprintf("Context:\n%s", res)),
-					openai.UserMessage(fmt.Sprintf("%s: %s", m.Author.Username, m.Content)),
-				}
-				response := ai.LlmGenerateText(history, m.Content)
-				_, err = s.ChannelMessageSend(thread.ID, response)
-				if err != nil {
-					log.Println("Error sending message in thread:", err)
-				}
+		}
+		// If user sent a message with the files
+		if m.Content != "" {
+			s.ChannelTyping(thread.ID)
+			go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
+			numOfAttachments := len(m.Attachments)
+			res := ai.QueryVectorDB(context.Background(), m.Content, m.ID, numOfAttachments)
+			history := []openai.ChatCompletionMessageParamUnion{
+				openai.SystemMessage(fmt.Sprintf("Context:\n%s", res)),
+				openai.UserMessage(fmt.Sprintf("%s: %s", m.Author.Username, m.Content)),
+			}
+			response := ai.LlmGenerateText(history, m.Content)
+			_, err = s.ChannelMessageSend(thread.ID, response)
+			if err != nil {
+				log.Println("Error sending message in thread:", err)
 			}
 		}
 	}
