@@ -13,6 +13,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/ai"
+	"github.com/redis/go-redis/v9"
 )
 
 func AddGuildToDB(guildID string, guildOwnerID string) {
@@ -332,12 +333,31 @@ var planLimitsMap = map[string]PlanLimits{
 }
 
 func CheckOwnerLimits(ownerID string) (bool, bool, error) {
-	userInfo, err := GetUserInfoFromUserID(ownerID)
-	if err != nil {
-		log.Printf("Error getting user info: %v", err)
-		return false, false, err
+	cached, redis_err := ai.RedisClient.Get(context.Background(), ownerID).Result()
+	cachedByteArr := []byte(cached)
+	var userInfo UserInfo
+	err := json.Unmarshal(cachedByteArr, &userInfo)
+	log.Println(err)
+	if redis_err == redis.Nil || err != nil {
+		log.Println("Owner limits not found in Redis, searching DB")
+		userInfo, err = GetUserInfoFromUserID(ownerID)
+		if err != nil {
+			log.Printf("Error getting user info: %v", err)
+			return false, false, err
+		}
+		marshalledUserInfo, err := json.Marshal(userInfo)
+		stringUserInfo := string(marshalledUserInfo)
+		result, err := ai.RedisClient.Set(context.Background(), ownerID, stringUserInfo, 24*time.Hour).Result()
+		if err != nil {
+			log.Printf("Failed to set data in Redis: %v", err)
+			return false, false, err
+		}
+		if result != "OK" {
+			log.Printf("Unexpected JSONSet result: %v", result)
+		}
+	} else {
+		log.Println("Cache hit")
 	}
-
 	if userInfo.Plan == "free" {
 		// If current time is past the renewal date, update the monthly start date
 		if time.Now().After(userInfo.PlanRenewalDate) {
