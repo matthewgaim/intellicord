@@ -134,6 +134,7 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
         WHERE js.owner_id = $1 AND uf.uploaded_at >= NOW() - INTERVAL '7 days'
         GROUP BY upload_date, uf.title, uf.file_size
         ORDER BY upload_date DESC
+		LIMIT 5
     `, user_id)
 	if err != nil {
 		log.Printf("Error fetching total files per day: %v", err)
