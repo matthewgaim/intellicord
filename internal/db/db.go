@@ -128,11 +128,11 @@ func GetRegisteredServers(userID string) ([]JoinedServersInfo, error) {
 
 func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInformation, int, error) {
 	rows, err := DbPool.Query(context.Background(), `
-        SELECT DATE(uf.uploaded_at) AS upload_date, COUNT(uf.id) AS total_files, uf.title, uf.file_size
+        SELECT DATE(uf.uploaded_at) AS upload_date, COUNT(uf.id) AS total_files, uf.title, uf.file_size, uf.uploader_id, uf.discord_server_id
         FROM uploaded_files uf
         JOIN joined_servers js ON uf.discord_server_id = js.discord_server_id
         WHERE js.owner_id = $1 AND uf.uploaded_at >= NOW() - INTERVAL '7 days'
-        GROUP BY upload_date, uf.title, uf.file_size
+        GROUP BY upload_date, uf.title, uf.file_size, uf.uploader_id, uf.discord_server_id
         ORDER BY upload_date DESC
 		LIMIT 5
     `, user_id)
@@ -151,7 +151,9 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 		var totalFiles int
 		var title string
 		var fileSize int64
-		if err := rows.Scan(&uploadDate, &totalFiles, &title, &fileSize); err != nil {
+		var uploaderId string
+		var discordServerId string
+		if err := rows.Scan(&uploadDate, &totalFiles, &title, &fileSize, &uploaderId, &discordServerId); err != nil {
 			log.Printf("Error scanning row: %v", err)
 			return nil, nil, 0, err
 		}
@@ -163,10 +165,12 @@ func FileAnalysisAllServers(user_id string) ([]map[string]interface{}, []FileInf
 		fileType := strings.ToUpper(titleSplit[len(titleSplit)-1])
 
 		fileDetails = append(fileDetails, FileInformation{
-			Name:         title,
-			Type:         fileType,
-			Size:         fileSize,
-			AnalyzedDate: dateStr,
+			Name:            title,
+			Type:            fileType,
+			Size:            fileSize,
+			AnalyzedDate:    dateStr,
+			UploaderID:      uploaderId,
+			DiscordServerID: discordServerId,
 		})
 	}
 

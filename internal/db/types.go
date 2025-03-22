@@ -15,10 +15,12 @@ type JoinedServersInfo struct {
 }
 
 type FileInformation struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Size         int64  `json:"size"`
-	AnalyzedDate string `json:"analyzed_date"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Size            int64  `json:"size"`
+	AnalyzedDate    string `json:"analyzed_date"`
+	UploaderID      string `json:"uploader_id"`
+	DiscordServerID string `json:"discord_server_id"`
 }
 
 type UserInfo struct {
