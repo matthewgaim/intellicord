@@ -27,7 +27,7 @@ func InitAI() {
 	oai = openai.NewClient()
 }
 
-func ChunkAndVectorize(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
+func ChunkAndEmbed(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
 	_, err := db.DbPool.Exec(ctx, `
 	INSERT INTO uploaded_files (
 		discord_server_id,
