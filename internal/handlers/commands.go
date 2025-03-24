@@ -87,7 +87,10 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			fmt.Println("Error sending message in thread:", err)
 		}
 
-		response := ai.LlmGenerateText(nil, userMessage)
+		response, err := ai.LlmGenerateText(nil, userMessage)
+		if err != nil {
+			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
+		}
 		_, err = s.ChannelMessageSend(thread.ID, response)
 		if err != nil {
 			fmt.Println("Error sending message in thread:", err)

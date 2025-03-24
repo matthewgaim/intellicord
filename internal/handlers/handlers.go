@@ -113,7 +113,10 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)
 				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
-				response := ai.LlmGenerateText(history, m.Content)
+				response, err := ai.LlmGenerateText(history, m.Content)
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "Server error. Try again later.")
+				}
 				_, err = s.ChannelMessageSend(m.ChannelID, response)
 				if err != nil {
 					log.Println("Error sending message in thread:", err)
@@ -209,7 +212,10 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 				openai.SystemMessage(fmt.Sprintf("Context:\n%s", res)),
 				openai.UserMessage(fmt.Sprintf("%s: %s", m.Author.Username, m.Content)),
 			}
-			response := ai.LlmGenerateText(history, m.Content)
+			response, err := ai.LlmGenerateText(history, m.Content)
+			if err != nil {
+				s.ChannelMessageSend(thread.ID, "Server error. Try again later.")
+			}
 			_, err = s.ChannelMessageSend(thread.ID, response)
 			if err != nil {
 				log.Println("Error sending message in thread:", err)
@@ -272,7 +278,10 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 		}
 		res := ai.QueryVectorDB(context.Background(), m.Content, m.ReferencedMessage.ID, len(m.ReferencedMessage.Attachments))
 		history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
-		response := ai.LlmGenerateText(history, m.Content)
+		response, err := ai.LlmGenerateText(history, m.Content)
+		if err != nil {
+			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
+		}
 		_, err = s.ChannelMessageSend(thread.ID, response)
 		if err != nil {
 			log.Println("Error sending message in thread:", err)

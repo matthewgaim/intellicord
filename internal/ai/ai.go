@@ -83,17 +83,17 @@ func ChunkAndEmbed(ctx context.Context, message_id string, content string, title
 	}
 }
 
-func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) string {
+func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) (string, error) {
 	history = append(history, openai.UserMessage(userMessage))
 	chatCompletion, err := oai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
 		Messages: openai.F(history),
 		Model:    openai.F(openai.ChatModelGPT4oMini),
 	})
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 	response := chatCompletion.Choices[0].Message.Content
-	return response
+	return response, nil
 }
 
 func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAttachments int) string {
