@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -17,24 +18,30 @@ import (
 	"github.com/stripe/stripe-go/v81/webhook"
 )
 
-func VerifyDiscordToken(bearerToken string) (bool, error) {
+func VerifyDiscordToken(bearerToken string) (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me", nil)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
 	req.Header.Set("Authorization", bearerToken)
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK {
-		return true, nil
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid token: %d", resp.StatusCode)
 	}
-	return false, fmt.Errorf("invalid token: %d", resp.StatusCode)
+
+	var user MiddlewareDiscordUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return "", err
+	}
+
+	return user.ID, nil
 }
 
 func DiscordAuthMiddleware() gin.HandlerFunc {
@@ -42,16 +49,19 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 		token := c.GetHeader("Authorization")
 		if token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
-			c.Abort() // Stop request processing
+			c.Abort()
 			return
 		}
 
-		valid, err := VerifyDiscordToken(token)
-		if !valid {
+		userID, err := VerifyDiscordToken(token)
+		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token", "details": err.Error()})
 			c.Abort()
 			return
 		}
+
+		// Store the user ID in the context
+		c.Set("userID", userID)
 		c.Next()
 	}
 }
@@ -96,7 +106,12 @@ func addUser() gin.HandlerFunc {
 
 func getUserInfo() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user_id := c.Query("user_id")
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+			return
+		}
+		user_id := userID.(string)
 		if user_id == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
 			return
@@ -113,9 +128,14 @@ func getUserInfo() gin.HandlerFunc {
 
 func getJoinedServers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user_id := c.Query("user_id")
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+			return
+		}
+		user_id := userID.(string)
 		if user_id == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "No user_id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
 			return
 		}
 
@@ -131,9 +151,14 @@ func getJoinedServers() gin.HandlerFunc {
 
 func getFilesFromAllServers() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user_id := c.Query("user_id")
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+			return
+		}
+		user_id := userID.(string)
 		if user_id == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "No user_id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
 			return
 		}
 
@@ -148,9 +173,24 @@ func getFilesFromAllServers() gin.HandlerFunc {
 
 func updateAllowedChannels() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+			return
+		}
+		user_id := userID.(string)
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
+			return
+		}
+
 		var requestBody UpdateAllowedChannelsRequest
 		if err := c.ShouldBindJSON(&requestBody); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if user_id != requestBody.UserID {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
 		if err := db.UpdateAllowedChannels(requestBody.ChannelIDs, requestBody.ServerID); err != nil {
@@ -188,9 +228,18 @@ func getAllowedChannels() gin.HandlerFunc {
 func createCheckoutSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		price_id := c.Query("price_id")
-		discord_id := c.Query("discord_id")
-		if price_id == "" || discord_id == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "price_id or discord_id is missing"})
+		if price_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "price_id is missing"})
+			return
+		}
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+			return
+		}
+		user_id := userID.(string)
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
 			return
 		}
 		domain := os.Getenv("INTELLICORD_FRONTEND_URL")
@@ -205,7 +254,7 @@ func createCheckoutSession() gin.HandlerFunc {
 			},
 			SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{
 				Metadata: map[string]string{
-					"discord_id": discord_id,
+					"discord_id": user_id,
 				},
 			},
 			Mode:         stripe.String(string(stripe.CheckoutSessionModeSubscription)),
@@ -249,13 +298,18 @@ func retrieveCheckoutSession() gin.HandlerFunc {
 
 func createPortalSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		discord_id := c.Query("discord_id")
-		if discord_id == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing discord ID"})
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+			return
+		}
+		user_id := userID.(string)
+		if user_id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
 			return
 		}
 		row := db.DbPool.QueryRow(context.Background(),
-			`SELECT stripe_customer_id FROM users WHERE discord_id = $1`, discord_id)
+			`SELECT stripe_customer_id FROM users WHERE discord_id = $1`, user_id)
 		var stripe_customer_id string
 		if err := row.Scan(&stripe_customer_id); err != nil {
 			log.Println(err)
