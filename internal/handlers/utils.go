@@ -103,7 +103,7 @@ func getFileTextAndSize(pdfURL string) (string, int, error) {
 		if err := json.Unmarshal(body, &result); err != nil {
 			return "", 0, fmt.Errorf("failed to parse JSON response: %v", err)
 		}
-		return "", 0, fmt.Errorf(result.Error)
+		return "", 0, fmt.Errorf("%s", result.Error)
 	}
 
 	var result ExtractedTextResponse

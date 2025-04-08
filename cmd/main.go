@@ -17,11 +17,7 @@ import (
 )
 
 func main() {
-	var err error = nil
-	err = godotenv.Load(".env")
-	if err != nil {
-		log.Println("Error loading .env file")
-	}
+	godotenv.Load(".env")
 
 	DISCORD_TOKEN := os.Getenv("DISCORD_TOKEN")
 	if DISCORD_TOKEN == "" {
@@ -74,7 +70,7 @@ func main() {
 		log.Fatal("Bot user is not initialized")
 	}
 
-	go api.StartAPIServer()
+	go api.InitAPI()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)

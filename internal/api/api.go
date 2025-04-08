@@ -18,6 +18,12 @@ import (
 	"github.com/stripe/stripe-go/v81/webhook"
 )
 
+var (
+	DISCORD_TOKEN            string
+	STRIPE_WEBHOOK_SECRET    string
+	INTELLICORD_FRONTEND_URL string
+)
+
 func VerifyDiscordToken(bearerToken string) (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me", nil)
@@ -66,9 +72,12 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-func StartAPIServer() {
+func InitAPI() {
 	router := gin.Default()
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
+	DISCORD_TOKEN = os.Getenv("DISCORD_TOKEN")
+	STRIPE_WEBHOOK_SECRET = os.Getenv("STRIPE_WEBHOOK_SECRET")
+	INTELLICORD_FRONTEND_URL = os.Getenv("INTELLICORD_FRONTEND_URL")
 
 	protectedRoutes := router.Group("/")
 	protectedRoutes.Use(DiscordAuthMiddleware())
@@ -91,11 +100,32 @@ func StartAPIServer() {
 	}
 }
 
+/*
+Add new user to database, or login existing user
+
+Success:
+
+	{"message": string}
+
+Error:
+
+	{"error": string}
+*/
 func addUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var user User
 		if err := c.ShouldBindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found on discord"})
+			return
+		}
+		user_id := userID.(string)
+		if user_id != user.UserID {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Not your account"})
 			return
 		}
 		db.AddUserToDB(user.UserID)
@@ -104,6 +134,17 @@ func addUser() gin.HandlerFunc {
 	}
 }
 
+/*
+Returns user info only from database
+
+Success:
+
+	{"user_info": db.UserInfo}
+
+Error:
+
+	{"error": string}
+*/
 func getUserInfo() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -126,6 +167,18 @@ func getUserInfo() gin.HandlerFunc {
 	}
 }
 
+/*
+Returns the users servers (along with those servers info retrieved from the Discord API)
+they chose for Intellicord to join
+
+Success:
+
+	[]db.JoinedServersInfo
+
+Error:
+
+	{"error": string}
+*/
 func getJoinedServers() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -149,6 +202,24 @@ func getJoinedServers() gin.HandlerFunc {
 	}
 }
 
+/*
+Returns info on all files uploaded from this week, along with amount of queries on them
+
+Success:
+
+	{
+		"files_analyzed": []{
+			"date":   string,
+			"amount": int,
+		},
+		"file_details":  []db.FileInformation,
+		"total_messages_count": int
+	}
+
+Error:
+
+	{"error": string}
+*/
 func getFilesFromAllServers() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -171,6 +242,17 @@ func getFilesFromAllServers() gin.HandlerFunc {
 	}
 }
 
+/*
+Updates channels that Intellicord bot is allowed to listen/respond to
+
+Success:
+
+	{"message": string}
+
+Error:
+
+	{"error": string}
+*/
 func updateAllowedChannels() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -202,6 +284,22 @@ func updateAllowedChannels() gin.HandlerFunc {
 	}
 }
 
+/*
+Returns:
+- Channels that Intellicord bot is allowed to listen/respond to.
+- Server info from the Discord API (to see what channels arent selected).
+
+Success:
+
+	{
+		"allowed_channels": []string,
+		"server_info": discordgo.Guild
+	}
+
+Error:
+
+	{"error": string}
+*/
 func getAllowedChannels() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		server_id := c.Query("server_id")
@@ -215,7 +313,7 @@ func getAllowedChannels() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		var BOT_TOKEN = fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN"))
+		var BOT_TOKEN = fmt.Sprintf("Bot %s", DISCORD_TOKEN)
 		server_info, err := db.GetServerInfo(server_id, BOT_TOKEN)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -225,6 +323,21 @@ func getAllowedChannels() gin.HandlerFunc {
 	}
 }
 
+/*
+Returns session client secret for user to be able to pay using Stripe
+
+Success:
+
+	{
+		"client_secret": string
+	}
+
+Error:
+
+	{
+		"error": string
+	}
+*/
 func createCheckoutSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		price_id := c.Query("price_id")
@@ -242,10 +355,9 @@ func createCheckoutSession() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user ID"})
 			return
 		}
-		domain := os.Getenv("INTELLICORD_FRONTEND_URL")
 		params := &stripe.CheckoutSessionParams{
 			UIMode:    stripe.String("embedded"),
-			ReturnURL: stripe.String(domain + "/dashboard/pricing/return?session_id={CHECKOUT_SESSION_ID}"),
+			ReturnURL: stripe.String(INTELLICORD_FRONTEND_URL + "/dashboard/pricing/return?session_id={CHECKOUT_SESSION_ID}"),
 			LineItems: []*stripe.CheckoutSessionLineItemParams{
 				{
 					Price:    stripe.String(price_id),
@@ -274,6 +386,23 @@ func createCheckoutSession() gin.HandlerFunc {
 	}
 }
 
+/*
+Returns stripe session information, if applicable.
+
+- Success:
+
+	{
+		"status": string
+		"name": string
+		"email": string
+	}
+
+- Error:
+
+	{
+		"error": string
+	}
+*/
 func retrieveCheckoutSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session_id := c.Query("session_id")
@@ -296,6 +425,21 @@ func retrieveCheckoutSession() gin.HandlerFunc {
 	}
 }
 
+/*
+Starts a subscription management session, and returns URL to that session.
+
+- Success:
+
+	{
+		"url": string
+	}
+
+- Error:
+
+	{
+		"error": string
+	}
+*/
 func createPortalSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
@@ -321,8 +465,7 @@ func createPortalSession() gin.HandlerFunc {
 			return
 		}
 
-		domain := os.Getenv("INTELLICORD_FRONTEND_URL")
-		returnURL := fmt.Sprintf("%s/dashboard/profile", domain)
+		returnURL := fmt.Sprintf("%s/dashboard/profile", INTELLICORD_FRONTEND_URL)
 		params := &stripe.BillingPortalSessionParams{
 			Customer:  stripe.String(stripe_customer_id),
 			ReturnURL: stripe.String(returnURL),
@@ -351,8 +494,7 @@ func handleStripeWebhook() gin.HandlerFunc {
 			return
 		}
 
-		stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
-		event, err := webhook.ConstructEvent(payload, c.GetHeader("Stripe-Signature"), stripeWebhookSecret)
+		event, err := webhook.ConstructEvent(payload, c.GetHeader("Stripe-Signature"), STRIPE_WEBHOOK_SECRET)
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error verifying webhook signature: %v\n", err)
