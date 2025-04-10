@@ -19,7 +19,7 @@ const (
 	OverlapSize = 128
 )
 
-var oai *openai.Client
+var oai openai.Client
 var OpenAIAPIKey string
 
 func InitAI() {
@@ -86,8 +86,8 @@ func ChunkAndEmbed(ctx context.Context, message_id string, content string, title
 func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) (string, error) {
 	history = append(history, openai.UserMessage(userMessage))
 	chatCompletion, err := oai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
-		Messages: openai.F(history),
-		Model:    openai.F(openai.ChatModelGPT4oMini),
+		Messages: history,
+		Model:    openai.ChatModelGPT4oMini,
 	})
 	if err != nil {
 		return "", err
@@ -169,9 +169,12 @@ type EmbedChannelObject struct {
 
 func newEmbedding(text string, embedChannel chan EmbedChannelObject, errChannel chan error, wg *sync.WaitGroup) {
 	defer wg.Done()
+	embeddingInput := openai.EmbeddingNewParamsInputUnion{
+		OfArrayOfStrings: []string{text},
+	}
 	res, err := oai.Embeddings.New(context.Background(), openai.EmbeddingNewParams{
-		Input: openai.F(openai.EmbeddingNewParamsInputUnion(openai.EmbeddingNewParamsInputArrayOfStrings{text})),
-		Model: openai.F("text-embedding-3-small"),
+		Input: embeddingInput,
+		Model: openai.EmbeddingModelTextEmbedding3Small,
 	})
 	if err != nil {
 		log.Printf("Error embedding text: %v", err)
