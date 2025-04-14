@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -15,8 +16,41 @@ import (
 )
 
 const (
-	ChunkSize   = 512
-	OverlapSize = 128
+	ChunkSize     = 512
+	OverlapSize   = 128
+	SYSTEM_PROMPT = `
+	You are Intellicord, a concise and knowledgeable Discord bot. Follow these principles:
+
+	1. Tone & Clarity
+		Be helpful, friendly, and professional.
+		Use clear, simple language. Avoid excessive formality or jargon.
+
+	2. Brevity & Formatting
+		Keep responses as short as possible while retaining essential info.
+		Use Markdown when applicable:
+			Code blocks (with language)
+			Bullet points
+			Bold for emphasis
+			Inline code for commands
+
+	3. Content Guidelines
+		Give direct, accurate answers.
+		Provide examples only when necessary.
+		Simplify complex topics, prioritizing key details.
+
+	4. Interaction Rules
+		Ask for clarification if needed.
+		Admit when you don’t know something.
+		Avoid harmful, inappropriate, or NSFW content.
+		Respect user privacy—never store personal data.
+
+	5. Error Handling
+		If a request is impossible, briefly explain why.
+		Suggest alternatives when relevant.
+		Warn users if limits (e.g., Discord’s message cap) apply.
+	
+	Stay concise, clear, and helpful at all times.
+	`
 )
 
 var oai openai.Client
@@ -27,7 +61,7 @@ func InitAI() {
 	oai = openai.NewClient()
 }
 
-func ChunkAndEmbed(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) {
+func ChunkAndEmbed(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) error {
 	_, err := db.DbPool.Exec(ctx, `
 	INSERT INTO uploaded_files (
 		discord_server_id,
@@ -39,8 +73,7 @@ func ChunkAndEmbed(ctx context.Context, message_id string, content string, title
 	) VALUES ($1, $2, $3, $4, $5, $6)
 	`, discord_server_id, channelID, uploader_id, title, doc_url, fileSize)
 	if err != nil {
-		log.Printf("Error uploading to uploaded_files: %v", err)
-		return
+		return fmt.Errorf("Error uploading to uploaded_files: %v", err)
 	}
 
 	chunks := chunkText(content)
@@ -81,9 +114,11 @@ func ChunkAndEmbed(ctx context.Context, message_id string, content string, title
 			log.Printf("Embedding error: %v", err)
 		}
 	}
+	return nil
 }
 
 func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) (string, error) {
+	history = slices.Insert(history, 0, openai.SystemMessage(SYSTEM_PROMPT))
 	history = append(history, openai.UserMessage(userMessage))
 	chatCompletion, err := oai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
 		Messages: history,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -196,14 +197,19 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 				}
 			}
 			discord_server_id := m.GuildID
-			ai.ChunkAndEmbed(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id, fileSize, thread.ID, m.Author.ID)
+			err = ai.ChunkAndEmbed(context.Background(), m.Message.ID, fileText, filename, attachmentLink, discord_server_id, fileSize, thread.ID, m.Author.ID)
+			if err != nil {
+				s.ChannelMessageEdit(thread.ID, processingMessage.ID, fmt.Sprintf("-# 🚨 There was an error processing file '%s'", filename))
+				continue
+			}
 			_, err = s.ChannelMessageEdit(thread.ID, processingMessage.ID, fmt.Sprintf("-# ✅ File '%s' is ready!", filename))
 			if err != nil {
 				log.Printf("Error sending message in thread: %v", err)
 			}
 		}
+
 		// If user sent a message with the files
-		if m.Content != "" {
+		if strings.Trim(m.Content, " ") != "" {
 			s.ChannelTyping(thread.ID)
 			go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 			numOfAttachments := len(m.Attachments)
