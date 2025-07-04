@@ -80,7 +80,6 @@ REDIS_URL=
 
 ### 3. Build & Run Dockerfile
 
-```docker
-docker build . -t intellicord:1.0
-docker run --env-file .env -d intellicord:1.0
+```shell
+docker compose --env-file ./.env up
 ```
