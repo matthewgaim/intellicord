@@ -1,8 +1,8 @@
 services:
   intellicord:
     restart: on-failure
-    build: ./
-    hostname: intellicord-bot
+    build: ./discord_bot
+    hostname: discord_bot
     ports:
       - '8080:8080'
     environment:
