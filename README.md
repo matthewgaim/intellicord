@@ -40,46 +40,75 @@ Supports a range of file types, including `.pdf`, `.docx`, and more.
 
 ## ⚙️ Local Setup
 
-### 1. Clone the Repo
+### Prerequisites
 
-```shell
+- [Intellicord Website](https://github.com/matthewgaim/intellicord-website) (needed for initial setup)
+- Docker and Docker Compose
+- PostgreSQL database
+- Redis instance
+
+### 1. Clone the Repository
+
+```bash
 git clone https://github.com/matthewgaim/intellicord.git
 cd intellicord
 ```
 
-### 2. Create a `.env` file with the following keys:
+### 2. Environment Configuration
 
-```
+Create a `.env` file in the root directory with the following variables:
+
+```env
 # Discord Bot Token
 # Find your bot's token here: https://discord.com/developers/applications
-DISCORD_TOKEN=
+DISCORD_TOKEN=your_discord_bot_token
 
 # OpenAI API Key
-OPENAI_API_KEY=
+OPENAI_API_KEY=your_openai_api_key
 
 # PostgreSQL connection string
 # Format: postgres://{user}:{password}@{host}:{port}/{database}
-DATABASE_URL=
+DATABASE_URL=postgres://user:password@localhost:5432/intellicord
 
 # URL for the file parser API
 # Repo: https://github.com/matthewgaim/intellicord_parser_api
-PARSER_API_URL=
+PARSER_API_URL=http://localhost:8081
 
 # URL of the Intellicord frontend (used for redirects)
-INTELLICORD_FRONTEND_URL=
-
-# Stripe API Keys
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
+INTELLICORD_FRONTEND_URL=http://localhost:3000
 
 # Redis connection URL
 # Default: redis://localhost:6379
-REDIS_URL=
-
+REDIS_URL=redis://localhost:6379
 ```
 
-### 3. Build & Run Dockerfile
+### 3. Running with Docker
 
-```shell
+```bash
 docker compose --env-file ./.env up
 ```
+
+---
+
+## 🔧 Configuration
+
+### Discord Bot Setup
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application
+3. Navigate to the "Bot" section
+4. Create a bot and copy the token to your `.env` file
+
+### Required Services
+- **Docker**
+- **PostgreSQL**
+- **Redis**
+---
+
+### Intellicord consists of several components:
+
+- **Discord Bot**: Main bot application (this repository)
+- **Parser API**: Handles file processing and text extraction (this repository)
+- **Web Frontend**: User management and bot configuration [Link here](https://github.com/matthewgaim/intellicord-website)
+- **Database**: PostgreSQL for data storage
+- **Cache**: Redis for temporary data and session management
