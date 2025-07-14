@@ -38,7 +38,7 @@ Supports a range of file types, including `.pdf`, `.docx`, and more.
 
 ---
 
-## ⚙️ Local Setup
+## ⚙️ Setup
 
 ### Prerequisites
 
@@ -46,6 +46,14 @@ Supports a range of file types, including `.pdf`, `.docx`, and more.
 - Docker and Docker Compose
 - PostgreSQL database
 - Redis instance
+- Discord Bot
+
+### Discord Bot Setup (For New Bot)
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application
+3. Navigate to the "Bot" section
+4. Create a bot and copy the token to your `.env` file
 
 ### 1. Clone the Repository
 
@@ -87,28 +95,3 @@ REDIS_URL=redis://localhost:6379
 ```bash
 docker compose --env-file ./.env up
 ```
-
----
-
-## 🔧 Configuration
-
-### Discord Bot Setup
-
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application
-3. Navigate to the "Bot" section
-4. Create a bot and copy the token to your `.env` file
-
-### Required Services
-- **Docker**
-- **PostgreSQL**
-- **Redis**
----
-
-### Intellicord consists of several components:
-
-- **Discord Bot**: Main bot application (this repository)
-- **Parser API**: Handles file processing and text extraction (this repository)
-- **Web Frontend**: User management and bot configuration [Link here](https://github.com/matthewgaim/intellicord-website)
-- **Database**: PostgreSQL for data storage
-- **Cache**: Redis for temporary data and session management
