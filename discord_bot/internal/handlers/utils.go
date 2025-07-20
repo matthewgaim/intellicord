@@ -80,6 +80,25 @@ func getFileTextAndSize(pdfURL string) (string, int, error) {
 	return result.ExtractedText, result.FileSize, nil
 }
 
+func sendResponseInChannel(session *discordgo.Session, channelID string, response string) {
+	if len(response) >= 2000 {
+		msg := ""
+		for ind, char := range response {
+			if ind != 0 && ind%2000 == 0 {
+				session.ChannelMessageSend(channelID, msg)
+				msg = ""
+			} else {
+				msg += string(char)
+			}
+		}
+		if msg != "" {
+			session.ChannelMessageSend(channelID, msg)
+		}
+	} else {
+		session.ChannelMessageSend(channelID, response)
+	}
+}
+
 func getRootMessageOfThread(s *discordgo.Session, channel *discordgo.Channel) (message *discordgo.Message, err error) {
 	parentMessage, err := s.ChannelMessage(channel.ParentID, channel.ID)
 	if err != nil {

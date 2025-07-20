@@ -85,7 +85,7 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				log.Printf("Error getting owners limits: %v", err)
 			}
 			if messageLimitReached {
-				s.ChannelMessageSend(channel.ID, "Maximum message limit reached. Upgrade for more messages")
+				sendResponseInChannel(s, channel.ID, "Maximum message limit reached. Upgrade for more messages")
 				return
 			}
 
@@ -94,7 +94,7 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 			// Don't recognize extra files in a thread
 			if len(m.Attachments) > 0 {
 				s.ChannelMessageDelete(channel.ID, m.Message.ID)
-				s.ChannelMessageSend(channel.ID, "Attached document will not be recognized in context")
+				sendResponseInChannel(s, channel.ID, "Attached document will not be recognized in context")
 				return
 			}
 
@@ -116,9 +116,9 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
 				response, err := ai.LlmGenerateText(history, m.Content)
 				if err != nil {
-					s.ChannelMessageSend(m.ChannelID, "Server error. Try again later.")
+					sendResponseInChannel(s, m.ChannelID, "Server error. Try again later.")
 				}
-				_, err = s.ChannelMessageSend(m.ChannelID, response)
+				sendResponseInChannel(s, m.ChannelID, response)
 				if err != nil {
 					log.Println("Error sending message in thread:", err)
 				}
@@ -164,7 +164,7 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			log.Printf("Error getting owners limits: %v", err)
 		}
 		if messageLimitReached {
-			s.ChannelMessageSend(channel.ID, "Maximum message limit reached. Upgrade for more messages")
+			sendResponseInChannel(s, channel.ID, "Maximum message limit reached. Upgrade for more messages")
 			return
 		}
 
@@ -220,7 +220,7 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			}
 			response, err := ai.LlmGenerateText(history, m.Content)
 			if err != nil {
-				s.ChannelMessageSend(thread.ID, "Server error. Try again later.")
+				sendResponseInChannel(s, thread.ID, "Server error. Try again later.")
 			}
 			_, err = s.ChannelMessageSend(thread.ID, response)
 			if err != nil {
