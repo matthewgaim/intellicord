@@ -122,7 +122,7 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 	history = append(history, openai.UserMessage(userMessage))
 	chatCompletion, err := oai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
 		Messages: history,
-		Model:    openai.ChatModelGPT4oMini,
+		Model:    openai.ChatModelGPT4_1Nano,
 	})
 	if err != nil {
 		return "", err
