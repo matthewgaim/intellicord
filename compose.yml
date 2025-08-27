@@ -1,6 +1,6 @@
 services:
   intellicord:
-    restart: on-failure
+    restart: no
     build: ./discord_bot
     hostname: discord_bot
     environment:
@@ -13,6 +13,6 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       REDIS_URL: ${REDIS_URL}
   parser_api:
-    restart: on-failure
+    restart: no
     build: ./parser_api
     hostname: parser_api
