@@ -3,8 +3,6 @@ services:
     restart: on-failure
     build: ./discord_bot
     hostname: discord_bot
-    ports:
-      - '8080:8080'
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -18,5 +16,3 @@ services:
     restart: on-failure
     build: ./parser_api
     hostname: parser_api
-    ports:
-      - '8081:8081'
