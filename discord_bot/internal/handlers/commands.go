@@ -86,8 +86,8 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if err != nil {
 			fmt.Println("Error sending message in thread:", err)
 		}
-
-		response, err := ai.LlmGenerateText(nil, userMessage)
+		var empty_history []*discordgo.Message
+		response, err := ai.LlmGenerateText(empty_history, userMessage, "openai", s.State.User.ID)
 		if err != nil {
 			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
 		}

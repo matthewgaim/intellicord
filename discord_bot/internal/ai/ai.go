@@ -4,15 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/openai/openai-go"
 	"github.com/pgvector/pgvector-go"
+	"google.golang.org/genai"
 )
 
 const (
@@ -54,11 +55,17 @@ const (
 )
 
 var oai openai.Client
-var OpenAIAPIKey string
+var gai *genai.Client
 
 func InitAI() {
-	OpenAIAPIKey = os.Getenv("OPENAI_API_KEY")
 	oai = openai.NewClient()
+
+	ctx := context.Background()
+	var err error
+	gai, err = genai.NewClient(ctx, nil)
+	if err != nil {
+		log.Printf("Error starting new Google AI Client: %s", err.Error())
+	}
 }
 
 func ChunkAndEmbed(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) error {
@@ -117,7 +124,24 @@ func ChunkAndEmbed(ctx context.Context, message_id string, content string, title
 	return nil
 }
 
-func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessage string) (string, error) {
+func LlmGenerateText(history []*discordgo.Message, userMessage string, company string, botID string) (string, error) {
+	// TODO: Store on DB the chosen company per server
+	response := ""
+	var err error = nil
+	if company == "openai" {
+		log.Println("Generating response with OpenAI")
+		response, err = OpenAIGenerateText(history, userMessage, botID)
+	} else if company == "google" {
+		log.Println("Generating response with Google")
+		response, err = GeminiGenerateText(history, userMessage, botID)
+	} else {
+		log.Println("No company chosen for LLM")
+	}
+	return response, err
+}
+
+func OpenAIGenerateText(msg_history []*discordgo.Message, userMessage string, botID string) (string, error) {
+	history := discordMessagesToOpenAIMessages(msg_history, botID)
 	history = slices.Insert(history, 0, openai.SystemMessage(SYSTEM_PROMPT))
 	history = append(history, openai.UserMessage(userMessage))
 	chatCompletion, err := oai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
@@ -129,6 +153,27 @@ func LlmGenerateText(history []openai.ChatCompletionMessageParamUnion, userMessa
 	}
 	response := chatCompletion.Choices[0].Message.Content
 	return response, nil
+}
+
+func GeminiGenerateText(msg_history []*discordgo.Message, userMessage string, botID string) (string, error) {
+	history := discordMessagesToGeminiMessages(msg_history, botID)
+	history = slices.Insert(history, 0, genai.NewContentFromText(SYSTEM_PROMPT, genai.RoleModel))
+
+	ctx := context.Background()
+	chat, err := gai.Chats.Create(ctx, "gemini-2.5-flash", nil, history)
+	if err != nil {
+		return "", err
+	}
+	res, err := chat.SendMessage(ctx, genai.Part{Text: userMessage})
+	if err != nil {
+		return "", err
+	}
+
+	if len(res.Candidates) > 0 {
+		return res.Candidates[0].Content.Parts[0].Text, nil
+	} else {
+		return "", err
+	}
 }
 
 func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAttachments int) string {

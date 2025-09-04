@@ -12,7 +12,6 @@ import (
 	"github.com/matthewgaim/intellicord/internal/ai"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/matthewgaim/intellicord/internal/guilds"
-	"github.com/openai/openai-go"
 )
 
 func CommandLookupHandler() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -113,8 +112,8 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 
 				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)
-				history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
-				response, err := ai.LlmGenerateText(history, m.Content)
+				new_user_msg := fmt.Sprintf("Additional Context:\n%s\n\n User: %s", res, m.Content)
+				response, err := ai.LlmGenerateText(history, new_user_msg, "openai", s.State.User.ID)
 				if err != nil {
 					sendResponseInChannel(s, m.ChannelID, "Server error. Try again later.")
 				}
@@ -214,11 +213,10 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 			go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
 			numOfAttachments := len(m.Attachments)
 			res := ai.QueryVectorDB(context.Background(), m.Content, m.ID, numOfAttachments)
-			history := []openai.ChatCompletionMessageParamUnion{
-				openai.SystemMessage(fmt.Sprintf("Context:\n%s", res)),
-				openai.UserMessage(fmt.Sprintf("%s: %s", m.Author.Username, m.Content)),
-			}
-			response, err := ai.LlmGenerateText(history, m.Content)
+
+			var empty_history []*discordgo.Message
+			new_user_msg := fmt.Sprintf("Context:\n%s\n\n%s: %s", res, m.Author.Username, m.Content)
+			response, err := ai.LlmGenerateText(empty_history, new_user_msg, "openai", s.State.User.ID)
 			if err != nil {
 				sendResponseInChannel(s, thread.ID, "Server error. Try again later.")
 			}
@@ -283,8 +281,7 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 			return
 		}
 		res := ai.QueryVectorDB(context.Background(), m.Content, m.ReferencedMessage.ID, len(m.ReferencedMessage.Attachments))
-		history = append(history, openai.SystemMessage(fmt.Sprintf("Additional Context:\n%s", res)))
-		response, err := ai.LlmGenerateText(history, m.Content)
+		response, err := ai.LlmGenerateText(history, fmt.Sprintf("Additional Context:\n%s\n\n User: %s", res, m.Content), "openai", s.State.User.ID)
 		if err != nil {
 			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
 		}

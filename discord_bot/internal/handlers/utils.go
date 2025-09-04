@@ -9,7 +9,6 @@ import (
 	"os"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/openai/openai-go"
 )
 
 type ExtractedTextResponse struct {
@@ -25,24 +24,13 @@ const (
 	THREAD_LIMIT = 20
 )
 
-func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]openai.ChatCompletionMessageParamUnion, error) {
+func GetThreadMessages(s *discordgo.Session, threadID string, botID string) ([]*discordgo.Message, error) {
 	msgs, err := s.ChannelMessages(threadID, THREAD_LIMIT, "", "", "")
 	if err != nil {
 		return nil, fmt.Errorf("error fetching messages: %w", err)
 	}
 
-	var history []openai.ChatCompletionMessageParamUnion
-	var msg *discordgo.Message
-	for i := len(msgs) - 1; i >= 0; i-- {
-		msg = msgs[i]
-		if msg.Author.ID == botID {
-			history = append(history, openai.AssistantMessage(msg.Content))
-		} else {
-			user_msg := fmt.Sprintf("%s: %s", msg.Author.Username, msg.Content)
-			history = append(history, openai.UserMessage(user_msg))
-		}
-	}
-	return history, nil
+	return msgs, nil
 }
 
 func getFileTextAndSize(pdfURL string) (string, int, error) {
