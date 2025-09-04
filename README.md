@@ -74,6 +74,9 @@ DISCORD_TOKEN=your_discord_bot_token
 # OpenAI API Key
 OPENAI_API_KEY=your_openai_api_key
 
+# Gemini API Key
+GEMINI_API_KEY=your_gemini_api_key
+
 # PostgreSQL connection string
 # Format: postgres://{user}:{password}@{host}:{port}/{database}
 DATABASE_URL=postgres://user:password@localhost:5432/intellicord

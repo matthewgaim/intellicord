@@ -6,6 +6,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/ai"
+	"github.com/matthewgaim/intellicord/internal/db"
 )
 
 var (
@@ -86,8 +87,16 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if err != nil {
 			fmt.Println("Error sending message in thread:", err)
 		}
+
+		company, model, err := db.GetServersLLMConfig(i.GuildID)
+		if err != nil {
+			log.Println(err)
+			sendResponseInChannel(s, thread.ID, "Can't find the LLM Model you chose.")
+			return
+		}
+
 		var empty_history []*discordgo.Message
-		response, err := ai.LlmGenerateText(empty_history, userMessage, "openai", s.State.User.ID)
+		response, err := ai.LlmGenerateText(empty_history, userMessage, company, s.State.User.ID, model)
 		if err != nil {
 			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
 		}

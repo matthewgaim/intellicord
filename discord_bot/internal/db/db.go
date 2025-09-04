@@ -265,7 +265,7 @@ func UpdateAllowedChannels(allowedChannels []string, serverID string) error {
 		return err
 	}
 	redis_key := fmt.Sprintf(`server_%s_allowed_channels`, serverID)
-	err = UpdateToRedis(redis_key, allowedChannels)
+	err = UpdateJSONToRedis(redis_key, allowedChannels)
 	if err != nil {
 		log.Println(err)
 	}
@@ -286,11 +286,40 @@ func GetAllowedChannels(serverID string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		UpdateToRedis(redis_key, allowedChannels)
+		UpdateJSONToRedis(redis_key, allowedChannels)
 	} else {
 		log.Println("Channel check cache hit")
 	}
 	return allowedChannels, nil
+}
+
+func GetServersLLMConfig(serverID string) (company string, model string, err error) {
+	ctx := context.Background()
+	companyKey := fmt.Sprintf(`server_%s_llm_company`, serverID)
+	modelKey := fmt.Sprintf(`server_%s_llm_model`, serverID)
+	log.Printf("Checking %s and %s\n", companyKey, modelKey)
+	// Try Redis first
+	company, companyErr := RedisClient.Get(ctx, companyKey).Result()
+	model, modelErr := RedisClient.Get(ctx, modelKey).Result()
+
+	if companyErr == nil && modelErr == nil {
+		log.Println("LLM config cache hit")
+		return company, model, nil
+	}
+
+	log.Printf("Not found in cache: %s or %s", companyKey, modelKey)
+
+	query := `SELECT llm_company, llm_model FROM joined_servers WHERE discord_server_id = $1`
+	var dbCompany, dbModel string
+	err = DbPool.QueryRow(ctx, query, serverID).Scan(&dbCompany, &dbModel)
+	if err != nil {
+		return "", "", err
+	}
+
+	UpdateStringToRedis(companyKey, dbCompany)
+	UpdateStringToRedis(modelKey, dbModel)
+
+	return dbCompany, dbModel, nil
 }
 
 func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time, customerID string) error {
@@ -308,7 +337,7 @@ func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, s
 			PlanMonthlyStartDate: subStartDate,
 			PlanRenewalDate:      subRenewalDate,
 		}
-		UpdateToRedis(userID, userInfo)
+		UpdateJSONToRedis(userID, userInfo)
 		return nil
 	}
 }
@@ -368,7 +397,7 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 			log.Printf("Error getting user info: %v", err)
 			return false, false, err
 		}
-		err = UpdateToRedis(ownerID, userInfo)
+		err = UpdateJSONToRedis(ownerID, userInfo)
 		if err != nil {
 			log.Printf("Failed to set data in Redis: %v", err)
 		}
@@ -441,7 +470,16 @@ func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 	return fileUploadLimitReached, messageLimitReached, nil
 }
 
-func UpdateToRedis(key string, val any) error {
+func UpdateStringToRedis(key string, value string) error {
+	_, err := RedisClient.Set(context.Background(), key, value, 24*time.Hour).Result()
+	if err != nil {
+		return err
+	}
+	log.Printf("Updating key on Redis: %s", key)
+	return nil
+}
+
+func UpdateJSONToRedis(key string, val any) error {
 	marshalledVal, err := json.Marshal(val)
 	if err != nil {
 		return err

@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS joined_servers (
     owner_id TEXT NOT NULL,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     allowed_channels TEXT[] DEFAULT '{}',
+    llm_company TEXT NOT NULL DEFAULT 'openai',
+    llm_model TEXT NOT NULL DEFAULT 'gpt-4.1-nano',
     FOREIGN KEY (owner_id) REFERENCES users(discord_id) ON DELETE CASCADE
 );
 

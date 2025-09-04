@@ -124,29 +124,28 @@ func ChunkAndEmbed(ctx context.Context, message_id string, content string, title
 	return nil
 }
 
-func LlmGenerateText(history []*discordgo.Message, userMessage string, company string, botID string) (string, error) {
-	// TODO: Store on DB the chosen company per server
+func LlmGenerateText(history []*discordgo.Message, userMessage string, company string, botID string, model string) (string, error) {
 	response := ""
 	var err error = nil
 	if company == "openai" {
 		log.Println("Generating response with OpenAI")
-		response, err = OpenAIGenerateText(history, userMessage, botID)
+		response, err = OpenAIGenerateText(history, userMessage, botID, model)
 	} else if company == "google" {
 		log.Println("Generating response with Google")
-		response, err = GeminiGenerateText(history, userMessage, botID)
+		response, err = GeminiGenerateText(history, userMessage, botID, model)
 	} else {
 		log.Println("No company chosen for LLM")
 	}
 	return response, err
 }
 
-func OpenAIGenerateText(msg_history []*discordgo.Message, userMessage string, botID string) (string, error) {
+func OpenAIGenerateText(msg_history []*discordgo.Message, userMessage string, botID string, model string) (string, error) {
 	history := discordMessagesToOpenAIMessages(msg_history, botID)
 	history = slices.Insert(history, 0, openai.SystemMessage(SYSTEM_PROMPT))
 	history = append(history, openai.UserMessage(userMessage))
 	chatCompletion, err := oai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
 		Messages: history,
-		Model:    openai.ChatModelGPT4_1Nano,
+		Model:    model,
 	})
 	if err != nil {
 		return "", err
@@ -155,12 +154,12 @@ func OpenAIGenerateText(msg_history []*discordgo.Message, userMessage string, bo
 	return response, nil
 }
 
-func GeminiGenerateText(msg_history []*discordgo.Message, userMessage string, botID string) (string, error) {
+func GeminiGenerateText(msg_history []*discordgo.Message, userMessage string, botID string, model string) (string, error) {
 	history := discordMessagesToGeminiMessages(msg_history, botID)
 	history = slices.Insert(history, 0, genai.NewContentFromText(SYSTEM_PROMPT, genai.RoleModel))
 
 	ctx := context.Background()
-	chat, err := gai.Chats.Create(ctx, "gemini-2.5-flash", nil, history)
+	chat, err := gai.Chats.Create(ctx, model, nil, history)
 	if err != nil {
 		return "", err
 	}

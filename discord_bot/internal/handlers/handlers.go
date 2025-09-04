@@ -111,9 +111,15 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				rootMsgID := rootMsg.ID
 
 				go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
+				company, model, err := db.GetServersLLMConfig(m.GuildID)
+				if err != nil {
+					log.Println(err)
+					sendResponseInChannel(s, m.ChannelID, "Can't find the LLM Model you chose.")
+					return
+				}
 				res := ai.QueryVectorDB(context.Background(), m.Content, rootMsgID, numOfAttachments)
 				new_user_msg := fmt.Sprintf("Additional Context:\n%s\n\n User: %s", res, m.Content)
-				response, err := ai.LlmGenerateText(history, new_user_msg, "openai", s.State.User.ID)
+				response, err := ai.LlmGenerateText(history, new_user_msg, company, s.State.User.ID, model)
 				if err != nil {
 					sendResponseInChannel(s, m.ChannelID, "Server error. Try again later.")
 				}
@@ -211,12 +217,19 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 		if strings.Trim(m.Content, " ") != "" {
 			s.ChannelTyping(thread.ID)
 			go db.AddMessageLog(m.Message.ID, m.GuildID, m.ChannelID, m.Author.ID)
+			company, model, err := db.GetServersLLMConfig(m.GuildID)
+			if err != nil {
+				log.Println(err)
+				sendResponseInChannel(s, m.ChannelID, "Can't find the LLM Model you chose.")
+				return
+			}
+
 			numOfAttachments := len(m.Attachments)
 			res := ai.QueryVectorDB(context.Background(), m.Content, m.ID, numOfAttachments)
 
 			var empty_history []*discordgo.Message
 			new_user_msg := fmt.Sprintf("Context:\n%s\n\n%s: %s", res, m.Author.Username, m.Content)
-			response, err := ai.LlmGenerateText(empty_history, new_user_msg, "openai", s.State.User.ID)
+			response, err := ai.LlmGenerateText(empty_history, new_user_msg, company, s.State.User.ID, model)
 			if err != nil {
 				sendResponseInChannel(s, thread.ID, "Server error. Try again later.")
 			}
@@ -280,10 +293,17 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 			log.Printf("Error getting thread messages: %v\n", err.Error())
 			return
 		}
+		company, model, err := db.GetServersLLMConfig(discord_server_id)
+		if err != nil {
+			log.Println(err)
+			s.ChannelMessageSend(thread.ID, "Can't find the LLM Model you chose.")
+			return
+		}
 		res := ai.QueryVectorDB(context.Background(), m.Content, m.ReferencedMessage.ID, len(m.ReferencedMessage.Attachments))
-		response, err := ai.LlmGenerateText(history, fmt.Sprintf("Additional Context:\n%s\n\n User: %s", res, m.Content), "openai", s.State.User.ID)
+		response, err := ai.LlmGenerateText(history, fmt.Sprintf("Additional Context:\n%s\n\n User: %s", res, m.Content), company, s.State.User.ID, model)
 		if err != nil {
 			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
+			return
 		}
 		_, err = s.ChannelMessageSend(thread.ID, response)
 		if err != nil {
