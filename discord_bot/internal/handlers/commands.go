@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"slices"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/ai"
@@ -29,12 +30,22 @@ var (
 				},
 			},
 		},
+		{
+			Name:        "addchannel",
+			Description: "Allow This Channel to Use Intellicord",
+		},
+		{
+			Name:        "delchannel",
+			Description: "Don't Let This Channel Use Intellicord",
+		},
 	}
 )
 
 func InitCommands() {
 	commandHandlers["ping"] = pingCommand()
 	commandHandlers["ask"] = askCommand()
+	commandHandlers["addchannel"] = addChannelCommand()
+	commandHandlers["delchannel"] = removeChannelCommand()
 }
 
 func pingCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -103,6 +114,100 @@ func askCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		_, err = s.ChannelMessageSend(thread.ID, response)
 		if err != nil {
 			fmt.Println("Error sending message in thread:", err)
+		}
+	}
+}
+
+func addChannelCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		guild, err := s.Guild(i.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+
+		selected_channel := i.ChannelID
+		if i.Member.User.ID == guild.OwnerID {
+			allowed_channels, err := db.GetAllowedChannels(i.GuildID)
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+			if slices.Contains(allowed_channels, selected_channel) {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Channel already allowed",
+						Flags:   discordgo.MessageFlagsEphemeral,
+					},
+				})
+			} else {
+				allowed_channels = append(allowed_channels, selected_channel)
+				db.UpdateAllowedChannels(allowed_channels, guild.ID)
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "✅ Channel can now use Intellicord",
+						Flags:   discordgo.MessageFlagsEphemeral,
+					},
+				})
+			}
+		} else {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You're not the owner!",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+	}
+}
+
+func removeChannelCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		guild, err := s.Guild(i.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+
+		selected_channel := i.ChannelID
+		if i.Member.User.ID == guild.OwnerID {
+			allowed_channels, err := db.GetAllowedChannels(i.GuildID)
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+			if slices.Contains(allowed_channels, selected_channel) {
+				allowed_channels = slices.DeleteFunc(allowed_channels, func(channel string) bool {
+					return channel == selected_channel
+				})
+				db.UpdateAllowedChannels(allowed_channels, guild.ID)
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "✅ Channel is no longer using Intellicord",
+						Flags:   discordgo.MessageFlagsEphemeral,
+					},
+				})
+			} else {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Channel wasn't being used by Intellicord",
+						Flags:   discordgo.MessageFlagsEphemeral,
+					},
+				})
+			}
+		} else {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You're not the owner!",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
 		}
 	}
 }
