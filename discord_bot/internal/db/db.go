@@ -331,6 +331,12 @@ func UpdateServersLLMConfig(serverID string, company string, model string) error
 	if err != nil {
 		return err
 	}
+
+	companyKey := fmt.Sprintf(`server_%s_llm_company`, serverID)
+	modelKey := fmt.Sprintf(`server_%s_llm_model`, serverID)
+	UpdateStringToRedis(companyKey, company)
+	UpdateStringToRedis(modelKey, model)
+
 	return nil
 }
 
