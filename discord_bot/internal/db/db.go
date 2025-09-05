@@ -322,24 +322,16 @@ func GetServersLLMConfig(serverID string) (company string, model string, err err
 	return dbCompany, dbModel, nil
 }
 
-func UpdateUsersPaidPlanStatus(userID string, priceID string, planName string, subStartDate time.Time, subRenewalDate time.Time, customerID string) error {
+func UpdateServersLLMConfig(serverID string, company string, model string) error {
 	_, err := DbPool.Exec(context.Background(), `
-		UPDATE users
-		SET price_id = $1, plan = $2, plan_monthly_start_date = $3, plan_renewal_date = $4, stripe_customer_id = $5
-		WHERE discord_id = $6`,
-		priceID, planName, subStartDate, subRenewalDate, customerID, userID)
+		UPDATE joined_servers
+		SET llm_company = $1, llm_model = $2
+		WHERE discord_server_id = $3`,
+		company, model, serverID)
 	if err != nil {
 		return err
-	} else {
-		userInfo := UserInfo{
-			PriceID:              priceID,
-			Plan:                 planName,
-			PlanMonthlyStartDate: subStartDate,
-			PlanRenewalDate:      subRenewalDate,
-		}
-		UpdateJSONToRedis(userID, userInfo)
-		return nil
 	}
+	return nil
 }
 
 func GetUserInfoFromUserID(discordID string) (UserInfo, error) {

@@ -38,6 +38,80 @@ var (
 			Name:        "delchannel",
 			Description: "Don't Let This Channel Use Intellicord",
 		},
+		{
+			Name:        "config",
+			Description: "Choose LLM Company and Model",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
+					Name:        "openai",
+					Description: "OpenAI LLM configuration",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "model",
+							Description: "Choose an OpenAI model",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "The model to use",
+									Required:    true,
+									Choices: []*discordgo.ApplicationCommandOptionChoice{
+										{
+											Name:  "GPT-4.1 Nano",
+											Value: "gpt-4.1-nano",
+										},
+										{
+											Name:  "GPT-5",
+											Value: "gpt-5",
+										},
+										{
+											Name:  "GPT-3.5 Turbo",
+											Value: "gpt-3.5-turbo",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
+					Name:        "google",
+					Description: "Google LLM configuration",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "model",
+							Description: "Choose a Google model",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "The model to use",
+									Required:    true,
+									Choices: []*discordgo.ApplicationCommandOptionChoice{
+										{
+											Name:  "Gemini 2.5 Flash Lite",
+											Value: "gemini-2.5-flash-lite",
+										},
+										{
+											Name:  "Gemini 2.5 Flash",
+											Value: "gemini-2.5-flash",
+										},
+										{
+											Name:  "Gemini 2.5 Pro",
+											Value: "gemini-2.5-pro",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 )
 
@@ -46,6 +120,54 @@ func InitCommands() {
 	commandHandlers["ask"] = askCommand()
 	commandHandlers["addchannel"] = addChannelCommand()
 	commandHandlers["delchannel"] = removeChannelCommand()
+	commandHandlers["config"] = updateLLMConfig()
+}
+
+func updateLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		guild, err := s.Guild(i.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+		if i.Member.User.ID == guild.OwnerID {
+			options := i.ApplicationCommandData().Options
+			subcommandGroup := options[0]
+
+			companyName := subcommandGroup.Name
+			subcommand := subcommandGroup.Options[0]
+			modelOption := subcommand.Options[0]
+			modelName := modelOption.Value.(string)
+
+			if err = db.UpdateServersLLMConfig(guild.ID, companyName, modelName); err != nil {
+				log.Println(err.Error())
+				return
+			}
+
+			// Construct the response message
+			responseMessage := fmt.Sprintf("LLM configuration updated!\nCompany: **%s**\nModel: **%s**", companyName, modelName)
+
+			// Respond to the user's interaction
+			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: responseMessage,
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			if err != nil {
+				log.Printf("Error responding to interaction: %v", err)
+			}
+		} else {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not the owner!",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+	}
 }
 
 func pingCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
