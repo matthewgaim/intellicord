@@ -17,3 +17,5 @@ services:
     restart: no
     build: ./parser_api
     hostname: parser_api
+    ports:
+      - "8081:8081"
