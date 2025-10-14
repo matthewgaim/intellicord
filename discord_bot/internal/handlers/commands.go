@@ -32,15 +32,15 @@ var (
 		},
 		{
 			Name:        "addchannel",
-			Description: "Allow This Channel to Use Intellicord",
+			Description: "Allow this channel to use Intellicord",
 		},
 		{
 			Name:        "delchannel",
-			Description: "Don't Let This Channel Use Intellicord",
+			Description: "Don't let this channel use Intellicord",
 		},
 		{
 			Name:        "config",
-			Description: "Choose LLM Company and Model",
+			Description: "Choose LLM company and model",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
@@ -112,6 +112,10 @@ var (
 				},
 			},
 		},
+		{
+			Name:        "showconfig",
+			Description: "Show server's LLM chosen",
+		},
 	}
 )
 
@@ -121,6 +125,7 @@ func InitCommands() {
 	commandHandlers["addchannel"] = addChannelCommand()
 	commandHandlers["delchannel"] = removeChannelCommand()
 	commandHandlers["config"] = updateLLMConfig()
+	commandHandlers["showconfig"] = showLLMConfig()
 }
 
 func updateLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -327,6 +332,46 @@ func removeChannelCommand() func(s *discordgo.Session, i *discordgo.InteractionC
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "You're not the owner!",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+	}
+}
+
+func showLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		guild, err := s.Guild(i.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+		if i.Member.User.ID == guild.OwnerID {
+			company, model, err := db.GetServersLLMConfig(i.GuildID)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			// Construct the response message
+			responseMessage := fmt.Sprintf("Your server is using %s's %s", company, model)
+
+			// Respond to the user's interaction
+			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: responseMessage,
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			if err != nil {
+				log.Printf("Error responding to interaction: %v", err)
+			}
+		} else {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not the owner!",
 					Flags:   discordgo.MessageFlagsEphemeral,
 				},
 			})
