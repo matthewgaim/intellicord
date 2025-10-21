@@ -1,5 +1,5 @@
 services:
-  intellicord:
+  discord_bot:
     restart: no
     build: ./discord_bot
     hostname: discord_bot
