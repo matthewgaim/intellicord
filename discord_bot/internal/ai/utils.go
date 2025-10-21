@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v3"
 	"google.golang.org/genai"
 )
 

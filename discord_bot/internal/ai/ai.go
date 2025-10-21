@@ -11,7 +11,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/db"
-	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v3"
 	"github.com/pgvector/pgvector-go"
 	"google.golang.org/genai"
 )
