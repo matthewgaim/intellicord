@@ -4,3 +4,4 @@ requests==2.28.2
 PyMuPDF==1.21.1
 python-docx
 openpyxl
+gunicorn
