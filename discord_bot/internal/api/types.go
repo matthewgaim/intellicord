@@ -24,3 +24,23 @@ type CheckoutSessionType struct {
 type ClientSecret struct {
 	ClientSecret string `json:"clientSecret"`
 }
+
+type DiscordTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	RefreshToken string `json:"refresh_token"`
+	Scope        string `json:"scope"`
+}
+
+type DiscordUser struct {
+	ID            string `json:"id"`
+	Username      string `json:"username"`
+	GlobalName    string `json:"global_name"`
+	Discriminator string `json:"discriminator"`
+	Avatar        string `json:"avatar"`
+}
+
+type DiscordMeResponse struct {
+	User DiscordUser `json:"user"`
+}

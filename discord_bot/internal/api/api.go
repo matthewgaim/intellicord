@@ -1,11 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/matthewgaim/intellicord/internal/db"
@@ -14,8 +18,10 @@ import (
 
 var (
 	DISCORD_TOKEN            string
-	STRIPE_WEBHOOK_SECRET    string
 	INTELLICORD_FRONTEND_URL string
+	DISCORD_CLIENT_ID        string
+	DISCORD_CLIENT_SECRET    string
+	DISCORD_REDIRECT_URI     string
 )
 
 func VerifyDiscordToken(bearerToken string) (string, error) {
@@ -69,13 +75,16 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 func InitAPI() {
 	router := gin.Default()
 	DISCORD_TOKEN = os.Getenv("DISCORD_TOKEN")
-	STRIPE_WEBHOOK_SECRET = os.Getenv("STRIPE_WEBHOOK_SECRET")
 	INTELLICORD_FRONTEND_URL = os.Getenv("INTELLICORD_FRONTEND_URL")
+	DISCORD_CLIENT_ID = os.Getenv("DISCORD_CLIENT_ID")
+	DISCORD_CLIENT_SECRET = os.Getenv("DISCORD_CLIENT_SECRET")
+	DISCORD_REDIRECT_URI = os.Getenv("DISCORD_REDIRECT_URI")
+
+	router.POST("/adduser", addUser())
 
 	protectedRoutes := router.Group("/")
 	protectedRoutes.Use(DiscordAuthMiddleware())
 	{
-		protectedRoutes.POST("/adduser", addUser())
 		protectedRoutes.GET("/get-user-info", getUserInfo())
 		protectedRoutes.GET("/get-joined-servers", getJoinedServers())
 		protectedRoutes.GET("/analytics/files-all-servers", getFilesFromAllServers())
@@ -89,37 +98,104 @@ func InitAPI() {
 	}
 }
 
-/*
-Add new user to database, or login existing user
+func getDiscordAvatarURL(userID, avatarHash string) string {
+	if avatarHash == "" {
+		return "https://cdn.discordapp.com/embed/avatars/0.png"
+	}
 
-Success:
+	extension := "png"
+	if strings.HasPrefix(avatarHash, "a_") {
+		extension = "gif"
+	}
 
-	{"message": string}
+	avatarURL := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s", userID, avatarHash, extension)
+	return avatarURL
+}
 
-Error:
-
-	{"error": string}
-*/
 func addUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var user User
-		if err := c.ShouldBindJSON(&user); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		var body struct {
+			Code string `json:"code"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || body.Code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing authorization code"})
 			return
 		}
-		userID, exists := c.Get("userID")
-		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found on discord"})
+
+		form := url.Values{}
+		form.Add("client_id", DISCORD_CLIENT_ID)
+		form.Add("client_secret", DISCORD_CLIENT_SECRET)
+		form.Add("grant_type", "authorization_code")
+		form.Add("code", body.Code)
+		form.Add("redirect_uri", DISCORD_REDIRECT_URI)
+
+		tokenResp, err := http.Post(
+			"https://discord.com/api/oauth2/token",
+			"application/x-www-form-urlencoded",
+			bytes.NewBufferString(form.Encode()),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to request token"})
 			return
 		}
-		user_id := userID.(string)
-		if user_id != user.UserID {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Not your account"})
+		defer tokenResp.Body.Close()
+
+		tokenBody, _ := io.ReadAll(tokenResp.Body)
+		if tokenResp.StatusCode != http.StatusOK {
+			c.JSON(http.StatusBadRequest, gin.H{"error": string(tokenBody)})
 			return
 		}
-		db.AddUserToDB(user.UserID)
-		go handlers.NewDiscordWebhookMessage("https://discord.com/api/webhooks/1347312325148934194/RYvl2nyBxkGJnvpTExXkedMj_I1PW410kIAHJAwomDgi25zBUuKHDRixcqH1VmsRcIZ8", fmt.Sprintf("Login: %s (%s)", user.Username, user.UserID))
-		c.JSON(http.StatusCreated, gin.H{"message": "User added successfully"})
+
+		var token DiscordTokenResponse
+		if err := json.Unmarshal(tokenBody, &token); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse token"})
+			return
+		}
+
+		req, _ := http.NewRequest("GET", "https://discord.com/api/oauth2/@me", nil)
+		req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+		client := &http.Client{}
+		userResp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
+			return
+		}
+		defer userResp.Body.Close()
+
+		userBody, _ := io.ReadAll(userResp.Body)
+		var me DiscordMeResponse
+		if err := json.Unmarshal(userBody, &me); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user info"})
+			return
+		}
+
+		user := me.User
+		fullTag := fmt.Sprintf("%s#%s", user.Username, user.Discriminator)
+		avatar := getDiscordAvatarURL(user.ID, user.Avatar)
+
+		db.AddUserToDB(user.ID)
+		go handlers.NewDiscordWebhookMessage(
+			"https://discord.com/api/webhooks/1347312325148934194/RYvl2nyBxkGJnvpTExXkedMj_I1PW410kIAHJAwomDgi25zBUuKHDRixcqH1VmsRcIZ8",
+			fmt.Sprintf("Login: %s (%s)", user.GlobalName, user.ID),
+		)
+
+		oneWeek := 7 * 24 * 60 * 60
+
+		c.SetCookie("discord_user_id", user.ID, oneWeek, "/", "", false, false)
+		c.SetCookie("discord_username", user.GlobalName, oneWeek, "/", "", false, false)
+		c.SetCookie("discord_avatar", avatar, oneWeek, "/", "", false, false)
+		c.SetCookie("access_token", token.AccessToken, oneWeek, "/", "", false, false)
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Login successful",
+			"user": gin.H{
+				"id":       user.ID,
+				"username": user.GlobalName,
+				"avatar":   avatar,
+				"tag":      fullTag,
+			},
+		})
+
 	}
 }
 
