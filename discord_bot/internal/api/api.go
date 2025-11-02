@@ -192,11 +192,11 @@ func addUser() gin.HandlerFunc {
 
 		oneWeek := 7 * 24 * 60 * 60
 
-		c.SetCookie("discord_user_id", user.ID, oneWeek, "/", "", false, false)
-		c.SetCookie("discord_username", user.GlobalName, oneWeek, "/", "", false, false)
-		c.SetCookie("discord_avatar", avatar, oneWeek, "/", "", false, false)
-		c.SetCookie("access_token", token.AccessToken, oneWeek, "/", "", false, false)
-
+		c.SetCookie("discord_user_id", user.ID, oneWeek, "/", "", true, false)
+		c.SetCookie("discord_username", user.GlobalName, oneWeek, "/", "", true, false)
+		c.SetCookie("discord_avatar", avatar, oneWeek, "/", "", true, false)
+		c.SetCookie("access_token", token.AccessToken, oneWeek, "/", "", true, false)
+		c.SetSameSite(http.SameSiteNoneMode)
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Login successful",
 			"user": gin.H{
