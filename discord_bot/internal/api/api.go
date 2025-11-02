@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -76,8 +77,14 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 func InitAPI() {
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
-		AllowAllOrigins: true,
+		AllowOrigins:     []string{"http://localhost:3000", "https://intellicord.senarado.com"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           24 * time.Hour,
 	}))
+
 	DISCORD_TOKEN = os.Getenv("DISCORD_TOKEN")
 	INTELLICORD_FRONTEND_URL = os.Getenv("INTELLICORD_FRONTEND_URL")
 	DISCORD_CLIENT_ID = os.Getenv("DISCORD_CLIENT_ID")
