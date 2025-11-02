@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/matthewgaim/intellicord/internal/handlers"
@@ -74,6 +75,9 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 
 func InitAPI() {
 	router := gin.Default()
+	router.Use(cors.New(cors.Config{
+		AllowAllOrigins: true,
+	}))
 	DISCORD_TOKEN = os.Getenv("DISCORD_TOKEN")
 	INTELLICORD_FRONTEND_URL = os.Getenv("INTELLICORD_FRONTEND_URL")
 	DISCORD_CLIENT_ID = os.Getenv("DISCORD_CLIENT_ID")
