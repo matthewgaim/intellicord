@@ -123,6 +123,18 @@ func getDiscordAvatarURL(userID, avatarHash string) string {
 	return avatarURL
 }
 
+func setCrossSiteCookie(c *gin.Context, name, value string, httpOnly bool) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     name,
+		Value:    value,
+		MaxAge:   7 * 24 * 60 * 60, // one week
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: httpOnly,
+		SameSite: http.SameSiteNoneMode,
+	})
+}
+
 func addUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
@@ -190,13 +202,18 @@ func addUser() gin.HandlerFunc {
 			fmt.Sprintf("Login: %s (%s)", user.GlobalName, user.ID),
 		)
 
-		oneWeek := 7 * 24 * 60 * 60
+		// oneWeek := 7 * 24 * 60 * 60
 
-		c.SetCookie("discord_user_id", user.ID, oneWeek, "/", "", true, false)
-		c.SetCookie("discord_username", user.GlobalName, oneWeek, "/", "", true, false)
-		c.SetCookie("discord_avatar", avatar, oneWeek, "/", "", true, false)
-		c.SetCookie("access_token", token.AccessToken, oneWeek, "/", "", true, false)
-		c.SetSameSite(http.SameSiteNoneMode)
+		// c.SetCookie("discord_user_id", user.ID, oneWeek, "/", "", true, false)
+		// c.SetCookie("discord_username", user.GlobalName, oneWeek, "/", "", true, false)
+		// c.SetCookie("discord_avatar", avatar, oneWeek, "/", "", true, false)
+		// c.SetCookie("access_token", token.AccessToken, oneWeek, "/", "", true, false)
+
+		setCrossSiteCookie(c, "discord_user_id", user.ID, true)
+		setCrossSiteCookie(c, "discord_username", user.GlobalName, true)
+		setCrossSiteCookie(c, "discord_avatar", avatar, true)
+		setCrossSiteCookie(c, "access_token", token.AccessToken, false)
+
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Login successful",
 			"user": gin.H{
