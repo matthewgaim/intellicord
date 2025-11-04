@@ -54,21 +54,20 @@ func VerifyDiscordToken(bearerToken string) (string, error) {
 
 func DiscordAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("Authorization")
-		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
+		cookie, err := c.Request.Cookie("access_token")
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing access_token cookie"})
 			c.Abort()
 			return
 		}
 
-		userID, err := VerifyDiscordToken(token)
+		userID, err := VerifyDiscordToken(cookie.Value)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token", "details": err.Error()})
 			c.Abort()
 			return
 		}
 
-		// Store the user ID in the context
 		c.Set("userID", userID)
 		c.Next()
 	}
