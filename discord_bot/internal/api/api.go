@@ -26,13 +26,13 @@ var (
 	DISCORD_REDIRECT_URI     string
 )
 
-func VerifyDiscordToken(bearerToken string) (string, error) {
+func VerifyDiscordToken(token string) (string, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me", nil)
 	if err != nil {
 		return "", err
 	}
-
+	bearerToken := fmt.Sprintf("Bearer %s", token)
 	req.Header.Set("Authorization", bearerToken)
 	resp, err := client.Do(req)
 	if err != nil {
