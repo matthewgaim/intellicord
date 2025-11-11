@@ -110,6 +110,26 @@ var (
 						},
 					},
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
+					Name:        "custom",
+					Description: "Custom LLM configuration (Ollama, Cerebras, etc.)",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "model",
+							Description: "Set the custom model name (e.g., llama3.2, gpt-oss-120b, etc.)",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "Enter the model name to use",
+									Required:    true,
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 		{

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/db"
 	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 	"github.com/pgvector/pgvector-go"
 	"google.golang.org/genai"
 )
@@ -56,6 +59,8 @@ const (
 
 var oai openai.Client
 var gai *genai.Client
+var cai openai.Client    // (optional) your own openai-compatible models like Ollama
+var customBaseURL string // (optional) Ollama example http://host.docker.internal:11434/v1
 
 func InitAI() {
 	oai = openai.NewClient()
@@ -66,6 +71,15 @@ func InitAI() {
 	if err != nil {
 		log.Printf("Error starting new Google AI Client: %s", err.Error())
 	}
+
+	customBaseURL = os.Getenv("CUSTOM_BASE_URL")
+	customApiKey := os.Getenv("CUSTOM_API_KEY")
+
+	cai = openai.NewClient(
+		option.WithBaseURL(customBaseURL),
+		option.WithAPIKey(customApiKey), // Optional for local Ollama
+		option.WithHTTPClient(&http.Client{}),
+	)
 }
 
 func ChunkAndEmbed(ctx context.Context, message_id string, content string, title string, doc_url string, discord_server_id string, fileSize int, channelID string, uploader_id string) error {
@@ -133,6 +147,9 @@ func LlmGenerateText(history []*discordgo.Message, userMessage string, company s
 	} else if company == "google" {
 		log.Println("Generating response with Google")
 		response, err = GeminiGenerateText(history, userMessage, botID, model)
+	} else if company == "custom" {
+		log.Printf("Generating response with custom API '%s' and model '%s'", customBaseURL, model)
+		response, err = CustomAIGenerateText(history, userMessage, botID, model)
 	} else {
 		log.Println("No company chosen for LLM")
 	}
@@ -173,6 +190,30 @@ func GeminiGenerateText(msg_history []*discordgo.Message, userMessage string, bo
 	} else {
 		return "", err
 	}
+}
+
+func CustomAIGenerateText(msg_history []*discordgo.Message, userMessage string, botID string, model string) (string, error) {
+	if customBaseURL == "" {
+		return "", fmt.Errorf("CUSTOM_BASE_URL is required")
+	}
+
+	history := discordMessagesToOpenAIMessages(msg_history, botID)
+	history = slices.Insert(history, 0, openai.SystemMessage(SYSTEM_PROMPT))
+	history = append(history, openai.UserMessage(userMessage))
+
+	chatCompletion, err := cai.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
+		Model:    model,
+		Messages: history,
+	})
+	if err != nil {
+		return "", fmt.Errorf("custom LLM request failed: %w", err)
+	}
+
+	if len(chatCompletion.Choices) == 0 {
+		return "", fmt.Errorf("no response from custom LLM")
+	}
+
+	return chatCompletion.Choices[0].Message.Content, nil
 }
 
 func QueryVectorDB(ctx context.Context, query string, rootMsgID string, numOfAttachments int) string {
