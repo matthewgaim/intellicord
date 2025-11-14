@@ -29,6 +29,7 @@ services:
   redis:
     image: redis:latest
     container_name: redis-container
+    hostname: redis
     restart: always
     ports:
       - "6379:6379"
@@ -37,6 +38,7 @@ services:
   pgvector:
     image: pgvector/pgvector:pg16
     container_name: postgres_db
+    hostname: postgres_db
     restart: always
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
