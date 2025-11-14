@@ -16,6 +16,9 @@ services:
       REDIS_URL: ${REDIS_URL}
       CUSTOM_API_KEY: ${CUSTOM_API_KEY}
       CUSTOM_BASE_URL: ${CUSTOM_BASE_URL}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "8080:8080"
   parser_api:
@@ -24,3 +27,28 @@ services:
     hostname: parser_api
     ports:
       - "8081:8081"
+  redis:
+    image: redis:latest
+    container_name: redis-container
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+  pgvector:
+    image: pgvector/pgvector
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data:/var/lib/postgresql/data
+      - ./postgres_init:/docker-entrypoint-initdb.d
+
+volumes:
+  redis_data:
+  pg_data:

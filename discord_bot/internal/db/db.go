@@ -20,7 +20,11 @@ var DbPool *pgxpool.Pool
 var RedisClient *redis.Client
 
 func InitDB() {
-	DATABASE_URL := os.Getenv("DATABASE_URL")
+	POSTGRES_DB := os.Getenv("POSTGRES_DB")
+	POSTGRES_USER := os.Getenv("POSTGRES_USER")
+	POSTGRES_PASSWORD := os.Getenv("POSTGRES_USER")
+
+	DATABASE_URL := fmt.Sprintf("postgres://%s:%s@host.docker.internal:5432/%s", POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB)
 	REDIS_URL := os.Getenv("REDIS_URL")
 
 	var err error
