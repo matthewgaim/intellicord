@@ -7,7 +7,6 @@ services:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      DATABASE_URL: ${DATABASE_URL}
       PARSER_API_URL: ${PARSER_API_URL}
       INTELLICORD_FRONTEND_URL: ${INTELLICORD_FRONTEND_URL}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
@@ -36,7 +35,7 @@ services:
     volumes:
       - redis_data:/data
   pgvector:
-    image: pgvector/pgvector
+    image: pgvector/pgvector:pg16
     container_name: postgres_db
     restart: always
     environment:
@@ -46,7 +45,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
       - ./postgres_init:/docker-entrypoint-initdb.d
 
 volumes:
