@@ -11,4 +11,4 @@ COPY app.py .
 
 EXPOSE 8081
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8081", "app:app"]
+CMD ["gunicorn", "-k", "gevent", "--bind", "0.0.0.0:8081", "app:app"]
