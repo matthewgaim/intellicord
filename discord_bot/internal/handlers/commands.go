@@ -63,12 +63,16 @@ var (
 											Value: "gpt-4.1-nano",
 										},
 										{
+											Name:  "GPT-5.1",
+											Value: "gpt-5.1",
+										},
+										{
 											Name:  "GPT-5",
 											Value: "gpt-5",
 										},
 										{
-											Name:  "GPT-3.5 Turbo",
-											Value: "gpt-3.5-turbo",
+											Name:  "GPT-4o Mini",
+											Value: "gpt-4o-mini",
 										},
 									},
 								},
@@ -103,6 +107,10 @@ var (
 										{
 											Name:  "Gemini 2.5 Pro",
 											Value: "gemini-2.5-pro",
+										},
+										{
+											Name:  "Gemini 3 Pro Preview",
+											Value: "gemini-3-pro-preview",
 										},
 									},
 								},
