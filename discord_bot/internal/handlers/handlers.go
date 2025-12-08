@@ -57,11 +57,9 @@ func BotRemovedFromServerHandler() func(s *discordgo.Session, g *discordgo.Guild
 
 func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		// dont let bot respond to itself or other bots
 		if m.Author.Bot {
 			return
 		}
-
 		channel, err := s.Channel(m.ChannelID)
 		if err != nil {
 			log.Println("Error fetching channel:", err)
@@ -74,11 +72,19 @@ func BotRespondToThreadHandler() func(s *discordgo.Session, m *discordgo.Message
 				return
 			}
 
+			// delete message from banned user
+			banned := db.BanCheck(*m)
+			if len(banned) > 0 {
+				s.ChannelMessageDelete(m.ChannelID, m.ID)
+				return
+			}
+
 			guild, err := s.Guild(m.GuildID)
 			if err != nil {
 				log.Println("Error getting guild")
 				return
 			}
+
 			_, messageLimitReached, err := db.CheckOwnerLimits(guild.OwnerID)
 			if err != nil {
 				log.Printf("Error getting owners limits: %v", err)
@@ -146,6 +152,13 @@ func StartThreadFromAttachmentUploadHandler() func(s *discordgo.Session, m *disc
 
 		// users can still upload files elsewhere, intellicord just wont do anything
 		if !slices.Contains(allowedChannels, m.ChannelID) {
+			return
+		}
+
+		// delete message from banned user
+		banned := db.BanCheck(*m)
+		if len(banned) > 0 {
+			s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return
 		}
 
@@ -265,6 +278,13 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 			return
 		}
 		if !slices.Contains(allowedChannels, m.ChannelID) {
+			return
+		}
+
+		// delete message from banned user
+		banned := db.BanCheck(*m)
+		if len(banned) > 0 {
+			s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return
 		}
 

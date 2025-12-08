@@ -53,3 +53,11 @@ CREATE TABLE IF NOT EXISTS message_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (discord_server_id) REFERENCES joined_servers(discord_server_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS banned_users (
+    id SERIAL PRIMARY KEY,
+    discord_user_id TEXT NOT NULL,
+    discord_server_id TEXT NOT NULL,
+    reason TEXT,
+    FOREIGN KEY (discord_server_id) REFERENCES joined_servers(discord_server_id) ON DELETE CASCADE
+);

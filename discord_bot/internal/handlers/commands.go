@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/matthewgaim/intellicord/internal/ai"
@@ -37,6 +39,10 @@ var (
 		{
 			Name:        "delchannel",
 			Description: "Don't let this channel use Intellicord",
+		},
+		{
+			Name:        "showchannels",
+			Description: "Shows all channels Intellicord is allowed",
 		},
 		{
 			Name:        "config",
@@ -142,7 +148,37 @@ var (
 		},
 		{
 			Name:        "showconfig",
-			Description: "Show server's LLM chosen",
+			Description: "Show server's LLM config & allowed channels",
+		},
+		{
+			Name:        "banuser",
+			Description: "Ban a user from using Intellicord on this server",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "user",
+					Description: "The user to ban",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "reason",
+					Description: "Reason for the ban (i.e. Spamming)",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "unbanuser",
+			Description: "Unban a user from using Intellicord",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "user",
+					Description: "The user to unban",
+					Required:    true,
+				},
+			},
 		},
 	}
 )
@@ -153,7 +189,9 @@ func InitCommands() {
 	commandHandlers["addchannel"] = addChannelCommand()
 	commandHandlers["delchannel"] = removeChannelCommand()
 	commandHandlers["config"] = updateLLMConfig()
-	commandHandlers["showconfig"] = showLLMConfig()
+	commandHandlers["showconfig"] = showConfigCommand()
+	commandHandlers["banuser"] = banUserCommand()
+	commandHandlers["unbanuser"] = unbanUserCommand()
 }
 
 func updateLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -364,35 +402,90 @@ func removeChannelCommand() func(s *discordgo.Session, i *discordgo.InteractionC
 	}
 }
 
-func showLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func showConfigCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		guild, err := s.Guild(i.GuildID)
 		if err != nil {
 			log.Println("Error getting guild")
 			return
 		}
-		if i.Member.User.ID == guild.OwnerID {
-			company, model, err := db.GetServersLLMConfig(i.GuildID)
-			if err != nil {
-				log.Println(err)
-				return
-			}
 
-			// Construct the response message
-			responseMessage := fmt.Sprintf("Your server is using %s's %s", company, model)
+		// 1. Fetch LLM Config
+		company, model, err := db.GetServersLLMConfig(i.GuildID)
+		if err != nil {
+			log.Println("Error fetching LLM config:", err)
+			company = "Error"
+			model = "Error"
+		}
 
-			// Respond to the user's interaction
-			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: responseMessage,
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			})
-			if err != nil {
-				log.Printf("Error responding to interaction: %v", err)
-			}
+		// 2. Fetch Allowed Channels
+		allowedChannelIDs, err := db.GetAllowedChannels(i.GuildID)
+		if err != nil {
+			log.Println("Error fetching allowed channels:", err)
+			allowedChannelIDs = nil
+		}
+
+		// 3. Prepare Channel List for Embed
+		var channelList string
+		if len(allowedChannelIDs) == 0 {
+			channelList = "Intellicord is currently **disabled** in all channels. Use `/addchannel` to enable it."
 		} else {
+			var channelMentions []string
+			for _, channelID := range allowedChannelIDs {
+				channelMentions = append(channelMentions, fmt.Sprintf("<#%s>", channelID))
+			}
+			channelList = strings.Join(channelMentions, ", ")
+			if len(channelList) > 1024 {
+				channelList = "Too many channels to display. Total allowed: " + fmt.Sprintf("%d", len(allowedChannelIDs))
+			}
+		}
+
+		embed := &discordgo.MessageEmbed{
+			Title:       "⚙️ Intellicord Server Configuration",
+			Color:       16776960,
+			Description: fmt.Sprintf("Current settings for **%s**.", guild.Name),
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "🤖 LLM Provider",
+					Value:  fmt.Sprintf("**Company:** %s\n**Model:** %s", company, model),
+					Inline: false,
+				},
+				{
+					Name:   fmt.Sprintf("📢 Allowed Channels (%d total)", len(allowedChannelIDs)),
+					Value:  channelList,
+					Inline: false,
+				},
+			},
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: fmt.Sprintf("Server ID: %s | Run by %s", i.GuildID, i.Member.User.Username),
+			},
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+
+		// 5. Respond with the Embed
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+				Flags:  discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			log.Printf("Error responding to interaction: %v", err)
+		}
+	}
+}
+
+func banUserCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		guild, err := s.Guild(i.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+
+		// Owner check
+		if i.Member.User.ID != guild.OwnerID {
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -400,6 +493,109 @@ func showLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate) 
 					Flags:   discordgo.MessageFlagsEphemeral,
 				},
 			})
+			return
+		}
+
+		options := i.ApplicationCommandData().Options
+		userOption := options[0]
+		reasonOption := options[1]
+
+		userID := userOption.Value.(string)
+		reason := reasonOption.StringValue()
+
+		if userID == guild.OwnerID {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You can't ban the owner.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+
+		err = db.AddNewBannedUser(userID, i.GuildID, reason)
+		if err != nil {
+			log.Printf("Error banning user %s: %v", userID, err)
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Failed to ban user. Database error.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+
+		// Construct and send success response
+		responseMessage := fmt.Sprintf("✅ User <@%s> has been banned from using Intellicord on this server for: **%s**", userID, reason)
+
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: responseMessage,
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			log.Printf("Error responding to interaction: %v", err)
+		}
+	}
+}
+
+func unbanUserCommand() func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		guild, err := s.Guild(i.GuildID)
+		if err != nil {
+			log.Println("Error getting guild")
+			return
+		}
+
+		// Owner check (Restricting to the server owner)
+		if i.Member.User.ID != guild.OwnerID {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not the owner!",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+
+		options := i.ApplicationCommandData().Options
+		// The "user" option is the first one
+		userOption := options[0]
+
+		// Get the user ID from the user option
+		userID := userOption.Value.(string)
+
+		// Attempt to remove the ban from the database
+		err = db.UnbanUser(userID, i.GuildID)
+		if err != nil {
+			log.Printf("Error unbanning user %s: %v", userID, err)
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "🚨 Failed to unban user. Database error.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			return
+		}
+
+		// Construct and send success response
+		responseMessage := fmt.Sprintf("✅ User <@%s> has been unbanned and can now use Intellicord on this server.", userID)
+
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: responseMessage,
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			log.Printf("Error responding to interaction: %v", err)
 		}
 	}
 }

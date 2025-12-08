@@ -386,6 +386,52 @@ var planLimitsMap = map[string]PlanLimits{
 	},
 }
 
+func BanCheck(m discordgo.MessageCreate) string {
+	var banID int
+	var banReason string
+	err := DbPool.QueryRow(context.Background(), `
+        SELECT id, reason
+        FROM banned_users
+        WHERE discord_user_id = $1 AND discord_server_id >= $2
+    `, m.Author.ID, m.GuildID).Scan(&banID, &banReason)
+	if err != nil {
+		log.Printf("Failed to check DB: %v", err)
+		return ""
+	}
+	if banReason != "" {
+		reason := fmt.Sprintf("You've been banned from using Intellicord on this server for: %s", banReason)
+		return reason
+	}
+	return ""
+}
+
+func AddNewBannedUser(user_id string, guild_id string, reason string) error {
+	_, err := DbPool.Exec(context.Background(), `
+		INSERT INTO banned_users
+			(discord_user_id, discord_server_id, reason)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING
+	`, user_id, guild_id, reason)
+	if err != nil {
+		log.Printf("Error adding guild to DB: %v", err)
+		return err
+	}
+	return nil
+}
+
+func UnbanUser(userID string, serverID string) error {
+	_, err := DbPool.Exec(context.Background(), `
+		DELETE FROM banned_users
+		WHERE discord_user_id = $1 AND discord_server_id = $2
+	`, userID, serverID)
+
+	if err != nil {
+		log.Printf("Error removing banned user %s from server %s: %v", userID, serverID, err)
+		return err
+	}
+	return nil
+}
+
 func CheckOwnerLimits(ownerID string) (bool, bool, error) {
 	cached, redis_err := RedisClient.Get(context.Background(), ownerID).Result()
 	cachedByteArr := []byte(cached)
