@@ -325,9 +325,6 @@ func StartThreadFromReplyHandler() func(s *discordgo.Session, m *discordgo.Messa
 			s.ChannelMessageSend(thread.ID, "Server error. Try again later")
 			return
 		}
-		_, err = s.ChannelMessageSend(thread.ID, response)
-		if err != nil {
-			log.Println("Error sending message in thread:", err)
-		}
+		sendResponseInChannel(s, thread.ID, response)
 	}
 }
