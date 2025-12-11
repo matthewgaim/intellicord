@@ -127,7 +127,7 @@ var (
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
 					Name:        "custom",
-					Description: "Custom LLM configuration (Ollama, Cerebras, etc.)",
+					Description: "Custom LLM configuration (Ollama, Cerebras, Groq, etc.)",
 					Options: []*discordgo.ApplicationCommandOption{
 						{
 							Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -216,7 +216,7 @@ func updateLLMConfig() func(s *discordgo.Session, i *discordgo.InteractionCreate
 			}
 
 			// Construct the response message
-			responseMessage := fmt.Sprintf("LLM configuration updated!\nCompany: **%s**\nModel: **%s**", companyName, modelName)
+			responseMessage := fmt.Sprintf("LLM configuration updated!\nProvider: **%s**\nModel: **%s**", companyName, modelName)
 
 			// Respond to the user's interaction
 			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -446,8 +446,8 @@ func showConfigCommand() func(s *discordgo.Session, i *discordgo.InteractionCrea
 			Description: fmt.Sprintf("Current settings for **%s**.", guild.Name),
 			Fields: []*discordgo.MessageEmbedField{
 				{
-					Name:   "🤖 LLM Provider",
-					Value:  fmt.Sprintf("**Company:** %s\n**Model:** %s", company, model),
+					Name:   "🤖 LLM Settings",
+					Value:  fmt.Sprintf("**Provider:** %s\n**Model:** %s", company, model),
 					Inline: false,
 				},
 				{
