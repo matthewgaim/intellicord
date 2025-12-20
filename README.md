@@ -1,10 +1,10 @@
 # Intellicord
 
-Intellicord is a powerful Discord bot that brings AI-assisted file analysis and conversation capabilities directly into your server. Upload documents, ask questions, and get intelligent, context-aware responses without ever leaving Discord.
+Intellicord is a Discord bot that brings AI-assisted file analysis and conversation capabilities directly into your server. Upload documents, ask questions, and get intelligent, context-aware responses without ever leaving Discord and needing to share responses.
 
 ---
 
-## 🚀 Features
+## Features
 
 **AI-Powered File Upload & Analysis**  
 Upload PDFs, Word documents, or spreadsheets — Intellicord processes them and provides contextual replies in chat.
@@ -20,7 +20,7 @@ Supports a range of file types, including `.pdf`, `.docx`, and more.
 
 ---
 
-## 🛠 How It Works
+## How It Works
 
 1. **Invite Intellicord to Your Server**  
    - Sign in with your Discord account  
@@ -38,22 +38,20 @@ Supports a range of file types, including `.pdf`, `.docx`, and more.
 
 ---
 
-## ⚙️ Setup
+## Setup
 
 ### Prerequisites
 
 - [Intellicord Website](https://github.com/matthewgaim/intellicord-website) (needed for initial setup)
 - Docker and Docker Compose
-- PostgreSQL database
-- Redis instance
-- Discord Bot
+- [A Discord bot](#discord-bot-setup-for-new-bot)
 
 ### Discord Bot Setup (For New Bot)
 
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
 2. Create a new application
 3. Navigate to the "Bot" section
-4. Create a bot and copy the token to your `.env` file
+4. Create a bot and copy the token to your [environment variables](#2-environment-configuration)
 
 ### 1. Clone the Repository
 
@@ -67,34 +65,36 @@ cd intellicord
 Create a `.env` file in the root directory with the following variables:
 
 ```env
-# Discord Bot Token
-# Find your bot's token here: https://discord.com/developers/applications
-DISCORD_TOKEN=your_discord_bot_token
+# Your discord bot's token
+DISCORD_TOKEN=
+DISCORD_CLIENT_ID=
+DISCORD_CLIENT_SECRET=
+DISCORD_REDIRECT_URI=
 
-# OpenAI API Key
-OPENAI_API_KEY=your_openai_api_key
+# You don't need all 4, you can pick OpenAI, Gemini, or your own LLM provider like Ollama or Groq (custom)
+OPENAI_API_KEY=
+GEMINI_API_KEY=
 
-# Gemini API Key
-GEMINI_API_KEY=your_gemini_api_key
+CUSTOM_API_KEY=
+CUSTOM_BASE_URL=
 
-# PostgreSQL connection string
-# Format: postgres://{user}:{password}@{host}:{port}/{database}
-DATABASE_URL=postgres://user:password@localhost:5432/intellicord
+# By default, these come with the Docker Compose
+PARSER_API_URL=http://parser_api:8081
+REDIS_URL=redis://redis:6379
 
-# URL for the file parser API
-# Repo: https://github.com/matthewgaim/intellicord_parser_api
-PARSER_API_URL=http://localhost:8081
-
-# URL of the Intellicord frontend (used for redirects)
-INTELLICORD_FRONTEND_URL=http://localhost:3000
-
-# Redis connection URL
-# Default: redis://localhost:6379
-REDIS_URL=redis://localhost:6379
+POSTGRES_DB=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
 ```
 
 ### 3. Running with Docker
 
+If you're using a .env file:
 ```bash
-docker compose --env-file ./.env up
+docker compose --env-file .env up -d
+```
+
+If you have your environment variables in the system:
+```bash
+docker compose up -d
 ```
