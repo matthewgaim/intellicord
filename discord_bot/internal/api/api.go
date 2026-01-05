@@ -76,7 +76,7 @@ func DiscordAuthMiddleware() gin.HandlerFunc {
 func InitAPI() {
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5500", "https://intellicord.senarado.com"},
+		AllowOrigins:     []string{"http://localhost:3000", "https://intellicord.senarado.com"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
